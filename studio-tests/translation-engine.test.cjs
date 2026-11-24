@@ -169,3 +169,8 @@ test('feature-length subtitles keep bounded prompt windows and stable progress t
   assert.ok(calls.prompts.every(({batch})=>batch.before.length+batch.requested.length+batch.after.length<=16));
   engine.destroy();
 });
+
+test('a supported pair that Chrome cannot initialize has a retryable, language-specific error', async () => {
+  const env = environment({makeNative() { throw new DOMException('Unable to create translator for the given source and target language.', 'NotSupportedError'); }});
+  await assert.rejects(start(await plan('en','ru',env.scope),{scope:env.scope}), /English → Russian language pack.*retry/);
+});

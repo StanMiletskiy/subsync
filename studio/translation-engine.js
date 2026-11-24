@@ -103,7 +103,12 @@
     if (signal?.aborted || (mode !== 'context' && !translator)) {
       destroy();
       signal?.throwIfAborted();
-      throw nativeResult.reason || nanoResult.reason || new Error('Chrome could not open the on-device language model.');
+      const reason = nativeResult.reason || nanoResult.reason;
+      if (nativeResult.reason?.name === 'NotSupportedError' || /unable to create translator/i.test(nativeResult.reason?.message || '')) {
+        const pairName = languages.of(selection.source) + ' → ' + languages.of(selection.target);
+        throw new Error('Chrome could not start its ' + pairName + ' language pack on this device. Check your connection and select Translate to retry.', {cause: reason});
+      }
+      throw reason || new Error('Chrome could not open the on-device language model.');
     }
 
     async function translate(units, {signal: taskSignal, onMode, onProgress} = {}) {

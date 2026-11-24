@@ -615,7 +615,12 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     if (signal?.aborted || (mode !== 'context' && !translator)) {
       destroy();
       signal?.throwIfAborted();
-      throw nativeResult.reason || nanoResult.reason || new Error('Chrome could not open the on-device language model.');
+      const reason = nativeResult.reason || nanoResult.reason;
+      if (nativeResult.reason?.name === 'NotSupportedError' || /unable to create translator/i.test(nativeResult.reason?.message || '')) {
+        const pairName = languages.of(selection.source) + ' → ' + languages.of(selection.target);
+        throw new Error('Chrome could not start its ' + pairName + ' language pack on this device. Check your connection and select Translate to retry.', {cause: reason});
+      }
+      throw reason || new Error('Chrome could not open the on-device language model.');
     }
 
     async function translate(units, {signal: taskSignal, onMode, onProgress} = {}) {
@@ -918,6 +923,10 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         const session = await engine.start(plan, {signal, scope, onStatus({component, progress: fraction}) {
           if (task !== current) return;
           const percent = Math.round(fraction * 100);
+          if (component === 'nano' && fraction === 1 && (plan.mode === 'prepare' || plan.mode === 'review')) {
+            message('Gemini Nano is ready. Preparing the language pair…');
+            return;
+          }
           message('Preparing ' + (component === 'nano' ? 'Gemini Nano' : 'Chrome translation resources') +
             (Number.isFinite(percent) ? ' · ' + percent + '%' : '…'));
         }});
@@ -943,7 +952,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
         el('export').disabled = false; output.hidden = false;
       } catch (error) {
-        if (task === current) message(error.message || 'Translation could not finish. Try again.', 'error');
+        if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
         release(current);
         if (task === current) { task = null; cancel.hidden = true; progress.hidden = true; button.disabled = !plan; }

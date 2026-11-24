@@ -175,6 +175,10 @@
         const session = await engine.start(plan, {signal, scope, onStatus({component, progress: fraction}) {
           if (task !== current) return;
           const percent = Math.round(fraction * 100);
+          if (component === 'nano' && fraction === 1 && (plan.mode === 'prepare' || plan.mode === 'review')) {
+            message('Gemini Nano is ready. Preparing the language pair…');
+            return;
+          }
           message('Preparing ' + (component === 'nano' ? 'Gemini Nano' : 'Chrome translation resources') +
             (Number.isFinite(percent) ? ' · ' + percent + '%' : '…'));
         }});
@@ -200,7 +204,7 @@
           (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
         el('export').disabled = false; output.hidden = false;
       } catch (error) {
-        if (task === current) message(error.message || 'Translation could not finish. Try again.', 'error');
+        if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
         release(current);
         if (task === current) { task = null; cancel.hidden = true; progress.hidden = true; button.disabled = !plan; }
