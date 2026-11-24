@@ -1,0 +1,3176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#181c20">
+  <meta name="description" content="Align subtitles in your browser using a timed SRT, a WAV soundtrack, or timing anchors. Your files stay on your device.">
+  <title>Cueframe · Subtitle sync</title>
+  <style>
+:root{color-scheme:light;--ink:#182122;--muted:#536461;--line:#d4ddd6;--accent:#c5f68c;--paper:#f1f4ed;--white:#fcfdf9;--focus:#207056;--mono:ui-monospace,"SFMono-Regular",Consolas,monospace;font:100%/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--paper)}
+*{box-sizing:border-box}
+body{margin:0}
+button,input,select{font:inherit}
+button{cursor:pointer;font-weight:650;line-height:1.25}
+button:disabled{cursor:default}
+button:focus-visible,select:focus-visible,summary:focus-visible,input:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button:disabled{opacity:.55}
+[hidden]{display:none!important}
+.wrap{width:min(1210px,calc(100% - 80px));margin:auto}
+.topbar{background:#1c2526;color:#f9fcf5}
+.bar-inner{display:flex;min-height:68px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:11px;font-size:1.39rem;font-weight:710;letter-spacing:-.07em}
+.brand-icon{width:28px;height:27px;display:inline-grid;align-content:center;gap:4px;background:var(--accent);border-radius:5px;padding:5px}
+.brand-icon i{display:block;height:4px;background:#22332c}
+.brand-icon i:first-child{width:13px}
+.brand-icon i:last-child{width:10px;justify-self:end}
+.local-label{font-size:.85rem;color:#ccdad2;letter-spacing:.02em}
+.mast{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:40px 0 28px}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(2.5rem,5.5vw,4.25rem);font-weight:640;letter-spacing:-.082em;line-height:1.03}
+.mast p{color:var(--muted);margin-top:11px;max-width:640px}
+button.secondary,.export,.primary{border-radius:8px;padding:.82rem 1.18rem;font-size:.94rem;border:1px solid var(--line);white-space:nowrap}
+.secondary{color:var(--ink);background:var(--white)}
+.secondary:hover,.positions button:hover,.text-button:hover{text-decoration:underline;text-underline-offset:3px}
+.desk{display:grid;grid-template-columns:minmax(300px,.83fr) minmax(0,1.57fr);align-items:start;gap:20px}
+.panel{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:24px;min-width:0}
+h2{font-size:1.45rem;line-height:1.3;letter-spacing:-.045em;font-weight:680}
+h3{font-size:1rem;line-height:1.35;letter-spacing:-.025em;font-weight:680}
+.switch{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);padding:3px;background:#edf1eb;border-radius:8px;margin-top:17px}
+.switch button{padding:9px 2px;border:0;font-size:.9rem;border-radius:5px;color:var(--muted);background:transparent}
+.switch button[aria-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 3px #14251925}
+.file-block{margin-top:23px}
+.dropzone{display:flex;align-items:center;gap:12px;position:relative;cursor:pointer;min-height:75px;padding:12px;border:1px dashed #94a79b;border-radius:8px;margin-top:9px;background:#f4f7f0}
+.dropzone:hover,.dropzone.over{background:#e7f4db;border-color:#54765d}
+.dropzone:focus-within{outline:3px solid var(--focus);outline-offset:3px}
+.dropzone input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.file-icon{width:32px;height:32px;border-radius:6px;background:#e0e9d9;display:grid;place-content:center;flex:0 0 auto}
+.file-icon:after{content:"";width:12px;height:15px;border:1.7px solid #385445;border-radius:2px;background:linear-gradient(#385445,#385445) 3px 6px/7px 1px no-repeat,linear-gradient(#385445,#385445) 3px 9px/5px 1px no-repeat}
+.ref-icon:after{border:0;width:19px;height:16px;background:linear-gradient(#385445,#385445) 0 center/2px 6px no-repeat,linear-gradient(#385445,#385445) 4px center/2px 11px no-repeat,linear-gradient(#385445,#385445) 8px center/2px 16px no-repeat,linear-gradient(#385445,#385445) 12px center/2px 8px no-repeat,linear-gradient(#385445,#385445) 16px center/2px 11px no-repeat}
+.file-info{display:flex;flex-direction:column;min-width:0;gap:2px}
+.file-info b{font-size:.95rem;overflow-wrap:anywhere;text-align:start}
+.file-info small,.hint,.status,.encoding,.time-hint,.export-bar small{font-size:.86rem;color:var(--muted)}
+.encoding{margin:6px 0 0}
+summary{cursor:pointer;width:fit-content}
+.encoding summary{font-size:.8rem}
+.encoding label{display:block;margin:8px 0 4px}
+select,.anchor-row input{border:1px solid #a6b5aa;color:var(--ink);border-radius:5px;background:white;max-width:100%;padding:7px 8px}
+.hint{margin-top:9px}
+.primary{width:100%;margin-top:20px;background:#203b31;color:#fff;border:1px solid #203b31}
+.primary:hover:enabled,.export:hover:enabled{background:#314f42}
+.status{margin-top:10px;min-height:2.6em}
+.status[data-kind=error]{color:#903215}
+.status[data-kind=ok]{color:#28563c}
+.text-button{border:0;background:none;color:#28583d;padding:8px 0;font-size:.9rem}
+.anchor-labels,.anchor-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 27px;gap:7px;align-items:center}
+.anchor-labels{font-size:.8rem;color:var(--muted);margin-top:12px}
+.anchor-row{margin:5px 0}
+.anchor-row input{font-family:var(--mono);min-width:0;width:100%;font-size:.84rem}
+.remove-anchor{background:transparent;border:0;color:var(--muted);font-size:1.12rem}
+.time-hint{font-family:var(--mono);font-size:.75rem}
+.section-head,.review-head,.export-bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tag{background:#edf2e9;color:#495e4e;font-size:.77rem;font-weight:650;padding:3px 8px;border-radius:4px}
+.timeline{color:#f4f6ed;background:#202a2b;border-radius:10px;padding:17px 15px 12px;margin-top:17px}
+.timeline-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-weight:650;font-size:.87rem;color:#ecf2e8}
+#range-time,.ruler{font: .74rem/1.4 var(--mono);color:#c4d1c6}
+.lane{display:grid;grid-template-columns:65px 1fr;align-items:center;gap:8px;margin-bottom:11px}
+.lane>span{font-size:.78rem;color:#d9e2d8}
+.lane-track{height:18px;position:relative;background:repeating-linear-gradient(90deg,#4a5655 0 1px,transparent 1px 10%),#2d3837;border-radius:2px;overflow:hidden}
+.segment{position:absolute;height:9px;top:5px;border-radius:2px;background:#a1c5c6;min-width:2px}
+.out-track .segment{background:var(--accent)}
+.ruler{display:flex;justify-content:space-between;margin-left:73px}
+.review-head{margin:23px 0 10px}
+.positions{display:flex;border:1px solid var(--line);border-radius:6px;padding:2px;gap:1px}
+.positions button{background:none;border:0;border-radius:3px;padding:5px 9px;font-size:.82rem;color:var(--muted)}
+.positions [aria-pressed=true]{color:#213b2a;background:#e6eedd}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:.91rem}
+th{text-align:left;color:var(--muted);font-size:.76rem;font-weight:600;border-top:1px solid var(--line);white-space:nowrap}
+th,td{padding:9px 7px;border-bottom:1px solid var(--line);vertical-align:middle}
+th:first-child,td:first-child{padding-left:0}
+th:last-child,td:last-child{padding-right:0}
+td:first-child{width:55%;overflow-wrap:anywhere}
+td:first-child bdi{white-space:pre-line}
+td.time{font: .78rem/1.5 var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+td:last-child.time{color:#356441}
+.export-bar{margin-top:19px}
+.export-bar p{font-size:.97rem;font-weight:650}
+.export-bar small{display:block;margin-top:2px}
+.export{background:#203b31;color:white;border-color:#203b31}
+.export:disabled{background:#e1e7dd;color:#5c6b5c;border-color:#d3ddd0;opacity:1}
+.help{font-size:.88rem;color:var(--muted);margin:20px 1px 28px}
+.help summary{color:#354d40;font-weight:600}
+.help p,.help pre{margin:9px 0;max-width:86ch}
+.help pre{overflow:auto;background:#e6ece2;color:#28372e;padding:10px;border-radius:5px;white-space:pre-wrap;overflow-wrap:anywhere}
+footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);margin:0 0 20px;padding-top:14px;color:var(--muted);font-size:.78rem}
+@media(min-width:1450px){.mast{margin-top:50px}}
+@media(max-width:950px){.wrap{width:calc(100% - 40px)}.desk{gap:13px;grid-template-columns:minmax(260px,.83fr) minmax(0,1.4fr)}.panel{padding:17px}.positions button{padding:5px 6px}td.time{font-size:.72rem}}
+@media(max-width:740px){.desk{grid-template-columns:1fr}.mast{margin:25px 0 20px}.mast p{font-size:.95rem}.bar-inner{min-height:56px}.inputs .status{min-height:0}.timeline{padding:14px}.desk{gap:14px}.review-head{margin-top:18px}td.time{font-size:.77rem}.wrap{width:calc(100% - 30px)}}
+@media(max-width:420px){.mast{align-items:start;flex-direction:column;gap:12px}.panel{padding:14px}.file-block{margin-top:16px}.review-head,.export-bar{align-items:flex-start;flex-wrap:wrap}th,td{padding:8px 4px}th{font-size:.69rem}td.time{font-size:.68rem}.lane{grid-template-columns:53px 1fr}.ruler{margin-left:61px}footer{flex-wrap:wrap}}
+.track-box{margin-top:9px}
+.track-box label{display:block;color:var(--muted);font-size:.85rem;margin-bottom:4px}
+.track-box select{width:100%;font-size:.9rem}
+.player{border-bottom:1px solid var(--line);padding:10px 0;font-size:.87rem;color:var(--muted)}
+.player summary{color:#354d40;font-weight:600}
+.player-file{position:relative;display:inline-block;margin:9px 0 3px;padding:5px 8px;border:1px solid var(--line);border-radius:5px;background:white;overflow:hidden;cursor:pointer}
+.player-file input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.player-file:focus-within{outline:3px solid var(--focus);outline-offset:2px}
+#player-note{display:block;font-size:.82rem}
+#player-stage{margin-top:8px;background:#19201e;border-radius:7px;overflow:hidden;color:white}
+#player{display:block;max-height:300px;width:100%;background:#171c19}
+#player-line{white-space:pre-line;text-align:center;line-height:1.35;font-size:1rem;min-height:1.9em;padding:4px 10px}
+.play-cue{margin-right:6px;border:1px solid var(--line);border-radius:4px;color:#28583d;background:#edf5e7;font-size:.73rem;padding:3px 5px;vertical-align:middle}
+
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap bar-inner">
+      <span class="brand"><span class="brand-icon" aria-hidden="true"><i></i><i></i></span>Cueframe</span>
+      <span class="local-label">On-device processing</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="mast">
+      <div><h1>Subtitle sync</h1><p>Align an SRT with the right cut of a film. Keep every line in its original language.</p></div>
+      <button type="button" class="secondary demo-button" id="demo">Load demo</button>
+    </div>
+    <div class="desk">
+      <section class="panel inputs" aria-labelledby="input-heading">
+        <h2 id="input-heading">Sync settings</h2>
+        <div class="switch" aria-label="Alignment method" role="group">
+          <button type="button" id="automatic" aria-pressed="true">Automatic</button>
+          <button type="button" id="manual" aria-pressed="false">Manual anchors</button>
+        </div>
+        <div class="file-block" id="source-block">
+          <h3>Subtitle to retime</h3>
+          <label class="dropzone" id="source-drop">
+            <input id="source-file" type="file" accept=".srt,application/x-subrip,text/plain" aria-label="Subtitle file">
+            <span class="file-icon" aria-hidden="true"></span>
+            <span class="file-info"><b id="source-name" dir="auto">Choose subtitle</b><small id="source-meta">Drop an SRT file here</small></span>
+          </label>
+          <details class="encoding" id="source-encoding-box"><summary>Text encoding</summary><label for="source-encoding">Subtitle encoding</label><select id="source-encoding"></select></details>
+        </div>
+        <div id="auto-fields" class="file-block">
+          <h3>Timing reference</h3>
+          <label class="dropzone" id="ref-drop">
+            <input id="ref-file" type="file" accept=".srt,.wav,.wave,.mp4,.m4v,.mov,.mkv,.mks,.webm,application/x-subrip,audio/wav,audio/x-wav,text/plain" aria-label="Timing reference file">
+            <span class="file-icon ref-icon" aria-hidden="true"></span>
+            <span class="file-info"><b id="ref-name" dir="auto">Choose reference</b><small id="ref-meta">Drop a timed SRT, movie or WAV</small></span>
+          </label>
+          <div id="track-box" class="track-box" hidden><label for="movie-track">Reference track</label><select id="movie-track"></select></div>
+          <details class="encoding" id="ref-encoding-box"><summary>Text encoding</summary><label for="ref-encoding">Reference encoding</label><select id="ref-encoding"></select></details>
+          <p class="hint">Use a reference from the cut you want to match. The languages can differ.</p>
+        </div>
+        <div id="anchor-fields" class="file-block" hidden>
+          <h3>Matching times</h3>
+          <p class="hint">Enter when the same line starts in your subtitle and in the film. One pair shifts the track. Add more to correct changing drift.</p>
+          <div class="anchor-labels" aria-hidden="true"><span>Subtitle</span><span>Film</span></div>
+          <div id="anchor-rows"></div>
+          <button type="button" class="text-button" id="add-anchor">+ Add timing pair</button>
+          <p class="time-hint">Format: HH:MM:SS,mmm</p>
+        </div>
+        <button type="button" class="primary" id="run" disabled>Find timing</button>
+        <button type="button" class="text-button" id="cancel" hidden>Cancel analysis</button>
+        <p class="status" id="status" role="status" aria-live="polite">Choose your subtitle and timing reference to begin.</p>
+      </section>
+      <section class="panel preview" aria-labelledby="preview-heading">
+        <div class="section-head"><h2 id="preview-heading">Timing preview</h2><span class="tag" id="preview-type">Example</span></div>
+        <div class="timeline">
+          <div class="timeline-top"><span>Timeline</span><span id="range-time">00:00:00 – 00:00:30</span></div>
+          <div class="lane"><span>Original</span><div class="lane-track" id="lane-original"></div></div>
+          <div class="lane"><span>Adjusted</span><div class="lane-track out-track" id="lane-adjusted"></div></div>
+          <div class="ruler" aria-hidden="true"><span id="ruler-start"></span><span id="ruler-mid"></span><span id="ruler-end"></span></div>
+        </div>
+        <details class="player" id="player-pane"><summary>Playback check</summary>
+          <label class="player-file">Choose a local movie or audio file<input type="file" id="play-file" accept="video/*,audio/*,.mkv,.m4v,.mov,.webm,.wav"></label>
+          <small id="player-note">Open a file to check the adjusted cues against the soundtrack.</small>
+          <div id="player-stage" hidden><video id="player" controls playsinline preload="metadata"></video><p id="player-line" dir="auto"></p></div>
+          <button type="button" class="text-button" id="capture" hidden>Use player time for film anchor</button>
+        </details>
+        <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
+          <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
+        </div></div>
+        <div class="table-wrap">
+          <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
+        </div>
+        <div class="export-bar"><div><p id="estimate-title">Example timing</p><small id="estimate-info">Load the demo to try these files.</small></div><button type="button" class="export" id="export" disabled>Export SRT</button></div>
+      </section>
+    </div>
+    <details class="help"><summary>Working with a movie or a different cut?</summary>
+      <p>Choose a timed SRT, an embedded text track in an MKV or MP4 movie, or a soundtrack your browser can decode. For other audio formats, extract the dialogue track as a mono WAV. With FFmpeg installed, this command selects the first audio track. Choose the audio track that matches your film.</p>
+      <pre><code>ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"</code></pre>
+      <p>Automatic alignment compares timing patterns. Music, sparse dialogue, or an inserted scene can make the estimate uncertain. Compare cues near the start, middle, and end. For a different cut, add timing pairs around the edit and check the lines in between. Lines absent from your release require editing separately.</p>
+    </details>
+    <p><a href="./index.html" download="cueframe.html">Download the offline app</a></p><details class="help"><summary>Source and license</summary><p>Cueframe is a browser rewrite in a fork of Michał Szymaniak’s SubSync. Distributed under the GNU General Public License, version 3 or later. <a href="https://github.com/StanMiletskiy/subsync">View source and tests on GitHub</a>.</p><details><summary>Read GNU GPL v3</summary><pre style="white-space:pre-wrap;max-height:18rem;overflow:auto">                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. &lt;https://fsf.org/&gt;
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU General Public License is a free, copyleft license for
+software and other kinds of works.
+
+  The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works.  By contrast,
+the GNU General Public License is intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains free
+software for all its users.  We, the Free Software Foundation, use the
+GNU General Public License for most of our software; it applies also to
+any other work released this way by its authors.  You can apply it to
+your programs, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+them if you wish), that you receive source code or can get it if you
+want it, that you can change the software or use pieces of it in new
+free programs, and that you know you can do these things.
+
+  To protect your rights, we need to prevent others from denying you
+these rights or asking you to surrender the rights.  Therefore, you have
+certain responsibilities if you distribute copies of the software, or if
+you modify it: responsibilities to respect the freedom of others.
+
+  For example, if you distribute copies of such a program, whether
+gratis or for a fee, you must pass on to the recipients the same
+freedoms that you received.  You must make sure that they, too, receive
+or can get the source code.  And you must show them these terms so they
+know their rights.
+
+  Developers that use the GNU GPL protect your rights with two steps:
+(1) assert copyright on the software, and (2) offer you this License
+giving you legal permission to copy, distribute and/or modify it.
+
+  For the developers' and authors' protection, the GPL clearly explains
+that there is no warranty for this free software.  For both users' and
+authors' sake, the GPL requires that modified versions be marked as
+changed, so that their problems will not be attributed erroneously to
+authors of previous versions.
+
+  Some devices are designed to deny users access to install or run
+modified versions of the software inside them, although the manufacturer
+can do so.  This is fundamentally incompatible with the aim of
+protecting users' freedom to change the software.  The systematic
+pattern of such abuse occurs in the area of products for individuals to
+use, which is precisely where it is most unacceptable.  Therefore, we
+have designed this version of the GPL to prohibit the practice for those
+products.  If such problems arise substantially in other domains, we
+stand ready to extend this provision to those domains in future versions
+of the GPL, as needed to protect the freedom of users.
+
+  Finally, every program is threatened constantly by software patents.
+States should not allow patents to restrict development and use of
+software on general-purpose computers, but in those that do, we wish to
+avoid the special danger that patents applied to a free program could
+make it effectively proprietary.  To prevent this, the GPL assures that
+patents cannot be used to render the program non-free.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                       TERMS AND CONDITIONS
+
+  0. Definitions.
+
+  "This License" refers to version 3 of the GNU General Public License.
+
+  "Copyright" also means copyright-like laws that apply to other kinds of
+works, such as semiconductor masks.
+
+  "The Program" refers to any copyrightable work licensed under this
+License.  Each licensee is addressed as "you".  "Licensees" and
+"recipients" may be individuals or organizations.
+
+  To "modify" a work means to copy from or adapt all or part of the work
+in a fashion requiring copyright permission, other than the making of an
+exact copy.  The resulting work is called a "modified version" of the
+earlier work or a work "based on" the earlier work.
+
+  A "covered work" means either the unmodified Program or a work based
+on the Program.
+
+  To "propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy.  Propagation includes copying,
+distribution (with or without modification), making available to the
+public, and in some countries other activities as well.
+
+  To "convey" a work means any kind of propagation that enables other
+parties to make or receive copies.  Mere interaction with a user through
+a computer network, with no transfer of a copy, is not conveying.
+
+  An interactive user interface displays "Appropriate Legal Notices"
+to the extent that it includes a convenient and prominently visible
+feature that (1) displays an appropriate copyright notice, and (2)
+tells the user that there is no warranty for the work (except to the
+extent that warranties are provided), that licensees may convey the
+work under this License, and how to view a copy of this License.  If
+the interface presents a list of user commands or options, such as a
+menu, a prominent item in the list meets this criterion.
+
+  1. Source Code.
+
+  The "source code" for a work means the preferred form of the work
+for making modifications to it.  "Object code" means any non-source
+form of a work.
+
+  A "Standard Interface" means an interface that either is an official
+standard defined by a recognized standards body, or, in the case of
+interfaces specified for a particular programming language, one that
+is widely used among developers working in that language.
+
+  The "System Libraries" of an executable work include anything, other
+than the work as a whole, that (a) is included in the normal form of
+packaging a Major Component, but which is not part of that Major
+Component, and (b) serves only to enable use of the work with that
+Major Component, or to implement a Standard Interface for which an
+implementation is available to the public in source code form.  A
+"Major Component", in this context, means a major essential component
+(kernel, window system, and so on) of the specific operating system
+(if any) on which the executable work runs, or a compiler used to
+produce the work, or an object code interpreter used to run it.
+
+  The "Corresponding Source" for a work in object code form means all
+the source code needed to generate, install, and (for an executable
+work) run the object code and to modify the work, including scripts to
+control those activities.  However, it does not include the work's
+System Libraries, or general-purpose tools or generally available free
+programs which are used unmodified in performing those activities but
+which are not part of the work.  For example, Corresponding Source
+includes interface definition files associated with source files for
+the work, and the source code for shared libraries and dynamically
+linked subprograms that the work is specifically designed to require,
+such as by intimate data communication or control flow between those
+subprograms and other parts of the work.
+
+  The Corresponding Source need not include anything that users
+can regenerate automatically from other parts of the Corresponding
+Source.
+
+  The Corresponding Source for a work in source code form is that
+same work.
+
+  2. Basic Permissions.
+
+  All rights granted under this License are granted for the term of
+copyright on the Program, and are irrevocable provided the stated
+conditions are met.  This License explicitly affirms your unlimited
+permission to run the unmodified Program.  The output from running a
+covered work is covered by this License only if the output, given its
+content, constitutes a covered work.  This License acknowledges your
+rights of fair use or other equivalent, as provided by copyright law.
+
+  You may make, run and propagate covered works that you do not
+convey, without conditions so long as your license otherwise remains
+in force.  You may convey covered works to others for the sole purpose
+of having them make modifications exclusively for you, or provide you
+with facilities for running those works, provided that you comply with
+the terms of this License in conveying all material for which you do
+not control copyright.  Those thus making or running the covered works
+for you must do so exclusively on your behalf, under your direction
+and control, on terms that prohibit them from making any copies of
+your copyrighted material outside their relationship with you.
+
+  Conveying under any other circumstances is permitted solely under
+the conditions stated below.  Sublicensing is not allowed; section 10
+makes it unnecessary.
+
+  3. Protecting Users' Legal Rights From Anti-Circumvention Law.
+
+  No covered work shall be deemed part of an effective technological
+measure under any applicable law fulfilling obligations under article
+11 of the WIPO copyright treaty adopted on 20 December 1996, or
+similar laws prohibiting or restricting circumvention of such
+measures.
+
+  When you convey a covered work, you waive any legal power to forbid
+circumvention of technological measures to the extent such circumvention
+is effected by exercising rights under this License with respect to
+the covered work, and you disclaim any intention to limit operation or
+modification of the work as a means of enforcing, against the work's
+users, your or third parties' legal rights to forbid circumvention of
+technological measures.
+
+  4. Conveying Verbatim Copies.
+
+  You may convey verbatim copies of the Program's source code as you
+receive it, in any medium, provided that you conspicuously and
+appropriately publish on each copy an appropriate copyright notice;
+keep intact all notices stating that this License and any
+non-permissive terms added in accord with section 7 apply to the code;
+keep intact all notices of the absence of any warranty; and give all
+recipients a copy of this License along with the Program.
+
+  You may charge any price or no price for each copy that you convey,
+and you may offer support or warranty protection for a fee.
+
+  5. Conveying Modified Source Versions.
+
+  You may convey a work based on the Program, or the modifications to
+produce it from the Program, in the form of source code under the
+terms of section 4, provided that you also meet all of these conditions:
+
+    a) The work must carry prominent notices stating that you modified
+    it, and giving a relevant date.
+
+    b) The work must carry prominent notices stating that it is
+    released under this License and any conditions added under section
+    7.  This requirement modifies the requirement in section 4 to
+    "keep intact all notices".
+
+    c) You must license the entire work, as a whole, under this
+    License to anyone who comes into possession of a copy.  This
+    License will therefore apply, along with any applicable section 7
+    additional terms, to the whole of the work, and all its parts,
+    regardless of how they are packaged.  This License gives no
+    permission to license the work in any other way, but it does not
+    invalidate such permission if you have separately received it.
+
+    d) If the work has interactive user interfaces, each must display
+    Appropriate Legal Notices; however, if the Program has interactive
+    interfaces that do not display Appropriate Legal Notices, your
+    work need not make them do so.
+
+  A compilation of a covered work with other separate and independent
+works, which are not by their nature extensions of the covered work,
+and which are not combined with it such as to form a larger program,
+in or on a volume of a storage or distribution medium, is called an
+"aggregate" if the compilation and its resulting copyright are not
+used to limit the access or legal rights of the compilation's users
+beyond what the individual works permit.  Inclusion of a covered work
+in an aggregate does not cause this License to apply to the other
+parts of the aggregate.
+
+  6. Conveying Non-Source Forms.
+
+  You may convey a covered work in object code form under the terms
+of sections 4 and 5, provided that you also convey the
+machine-readable Corresponding Source under the terms of this License,
+in one of these ways:
+
+    a) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by the
+    Corresponding Source fixed on a durable physical medium
+    customarily used for software interchange.
+
+    b) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by a
+    written offer, valid for at least three years and valid for as
+    long as you offer spare parts or customer support for that product
+    model, to give anyone who possesses the object code either (1) a
+    copy of the Corresponding Source for all the software in the
+    product that is covered by this License, on a durable physical
+    medium customarily used for software interchange, for a price no
+    more than your reasonable cost of physically performing this
+    conveying of source, or (2) access to copy the
+    Corresponding Source from a network server at no charge.
+
+    c) Convey individual copies of the object code with a copy of the
+    written offer to provide the Corresponding Source.  This
+    alternative is allowed only occasionally and noncommercially, and
+    only if you received the object code with such an offer, in accord
+    with subsection 6b.
+
+    d) Convey the object code by offering access from a designated
+    place (gratis or for a charge), and offer equivalent access to the
+    Corresponding Source in the same way through the same place at no
+    further charge.  You need not require recipients to copy the
+    Corresponding Source along with the object code.  If the place to
+    copy the object code is a network server, the Corresponding Source
+    may be on a different server (operated by you or a third party)
+    that supports equivalent copying facilities, provided you maintain
+    clear directions next to the object code saying where to find the
+    Corresponding Source.  Regardless of what server hosts the
+    Corresponding Source, you remain obligated to ensure that it is
+    available for as long as needed to satisfy these requirements.
+
+    e) Convey the object code using peer-to-peer transmission, provided
+    you inform other peers where the object code and Corresponding
+    Source of the work are being offered to the general public at no
+    charge under subsection 6d.
+
+  A separable portion of the object code, whose source code is excluded
+from the Corresponding Source as a System Library, need not be
+included in conveying the object code work.
+
+  A "User Product" is either (1) a "consumer product", which means any
+tangible personal property which is normally used for personal, family,
+or household purposes, or (2) anything designed or sold for incorporation
+into a dwelling.  In determining whether a product is a consumer product,
+doubtful cases shall be resolved in favor of coverage.  For a particular
+product received by a particular user, "normally used" refers to a
+typical or common use of that class of product, regardless of the status
+of the particular user or of the way in which the particular user
+actually uses, or expects or is expected to use, the product.  A product
+is a consumer product regardless of whether the product has substantial
+commercial, industrial or non-consumer uses, unless such uses represent
+the only significant mode of use of the product.
+
+  "Installation Information" for a User Product means any methods,
+procedures, authorization keys, or other information required to install
+and execute modified versions of a covered work in that User Product from
+a modified version of its Corresponding Source.  The information must
+suffice to ensure that the continued functioning of the modified object
+code is in no case prevented or interfered with solely because
+modification has been made.
+
+  If you convey an object code work under this section in, or with, or
+specifically for use in, a User Product, and the conveying occurs as
+part of a transaction in which the right of possession and use of the
+User Product is transferred to the recipient in perpetuity or for a
+fixed term (regardless of how the transaction is characterized), the
+Corresponding Source conveyed under this section must be accompanied
+by the Installation Information.  But this requirement does not apply
+if neither you nor any third party retains the ability to install
+modified object code on the User Product (for example, the work has
+been installed in ROM).
+
+  The requirement to provide Installation Information does not include a
+requirement to continue to provide support service, warranty, or updates
+for a work that has been modified or installed by the recipient, or for
+the User Product in which it has been modified or installed.  Access to a
+network may be denied when the modification itself materially and
+adversely affects the operation of the network or violates the rules and
+protocols for communication across the network.
+
+  Corresponding Source conveyed, and Installation Information provided,
+in accord with this section must be in a format that is publicly
+documented (and with an implementation available to the public in
+source code form), and must require no special password or key for
+unpacking, reading or copying.
+
+  7. Additional Terms.
+
+  "Additional permissions" are terms that supplement the terms of this
+License by making exceptions from one or more of its conditions.
+Additional permissions that are applicable to the entire Program shall
+be treated as though they were included in this License, to the extent
+that they are valid under applicable law.  If additional permissions
+apply only to part of the Program, that part may be used separately
+under those permissions, but the entire Program remains governed by
+this License without regard to the additional permissions.
+
+  When you convey a copy of a covered work, you may at your option
+remove any additional permissions from that copy, or from any part of
+it.  (Additional permissions may be written to require their own
+removal in certain cases when you modify the work.)  You may place
+additional permissions on material, added by you to a covered work,
+for which you have or can give appropriate copyright permission.
+
+  Notwithstanding any other provision of this License, for material you
+add to a covered work, you may (if authorized by the copyright holders of
+that material) supplement the terms of this License with terms:
+
+    a) Disclaiming warranty or limiting liability differently from the
+    terms of sections 15 and 16 of this License; or
+
+    b) Requiring preservation of specified reasonable legal notices or
+    author attributions in that material or in the Appropriate Legal
+    Notices displayed by works containing it; or
+
+    c) Prohibiting misrepresentation of the origin of that material, or
+    requiring that modified versions of such material be marked in
+    reasonable ways as different from the original version; or
+
+    d) Limiting the use for publicity purposes of names of licensors or
+    authors of the material; or
+
+    e) Declining to grant rights under trademark law for use of some
+    trade names, trademarks, or service marks; or
+
+    f) Requiring indemnification of licensors and authors of that
+    material by anyone who conveys the material (or modified versions of
+    it) with contractual assumptions of liability to the recipient, for
+    any liability that these contractual assumptions directly impose on
+    those licensors and authors.
+
+  All other non-permissive additional terms are considered "further
+restrictions" within the meaning of section 10.  If the Program as you
+received it, or any part of it, contains a notice stating that it is
+governed by this License along with a term that is a further
+restriction, you may remove that term.  If a license document contains
+a further restriction but permits relicensing or conveying under this
+License, you may add to a covered work material governed by the terms
+of that license document, provided that the further restriction does
+not survive such relicensing or conveying.
+
+  If you add terms to a covered work in accord with this section, you
+must place, in the relevant source files, a statement of the
+additional terms that apply to those files, or a notice indicating
+where to find the applicable terms.
+
+  Additional terms, permissive or non-permissive, may be stated in the
+form of a separately written license, or stated as exceptions;
+the above requirements apply either way.
+
+  8. Termination.
+
+  You may not propagate or modify a covered work except as expressly
+provided under this License.  Any attempt otherwise to propagate or
+modify it is void, and will automatically terminate your rights under
+this License (including any patent licenses granted under the third
+paragraph of section 11).
+
+  However, if you cease all violation of this License, then your
+license from a particular copyright holder is reinstated (a)
+provisionally, unless and until the copyright holder explicitly and
+finally terminates your license, and (b) permanently, if the copyright
+holder fails to notify you of the violation by some reasonable means
+prior to 60 days after the cessation.
+
+  Moreover, your license from a particular copyright holder is
+reinstated permanently if the copyright holder notifies you of the
+violation by some reasonable means, this is the first time you have
+received notice of violation of this License (for any work) from that
+copyright holder, and you cure the violation prior to 30 days after
+your receipt of the notice.
+
+  Termination of your rights under this section does not terminate the
+licenses of parties who have received copies or rights from you under
+this License.  If your rights have been terminated and not permanently
+reinstated, you do not qualify to receive new licenses for the same
+material under section 10.
+
+  9. Acceptance Not Required for Having Copies.
+
+  You are not required to accept this License in order to receive or
+run a copy of the Program.  Ancillary propagation of a covered work
+occurring solely as a consequence of using peer-to-peer transmission
+to receive a copy likewise does not require acceptance.  However,
+nothing other than this License grants you permission to propagate or
+modify any covered work.  These actions infringe copyright if you do
+not accept this License.  Therefore, by modifying or propagating a
+covered work, you indicate your acceptance of this License to do so.
+
+  10. Automatic Licensing of Downstream Recipients.
+
+  Each time you convey a covered work, the recipient automatically
+receives a license from the original licensors, to run, modify and
+propagate that work, subject to this License.  You are not responsible
+for enforcing compliance by third parties with this License.
+
+  An "entity transaction" is a transaction transferring control of an
+organization, or substantially all assets of one, or subdividing an
+organization, or merging organizations.  If propagation of a covered
+work results from an entity transaction, each party to that
+transaction who receives a copy of the work also receives whatever
+licenses to the work the party's predecessor in interest had or could
+give under the previous paragraph, plus a right to possession of the
+Corresponding Source of the work from the predecessor in interest, if
+the predecessor has it or can get it with reasonable efforts.
+
+  You may not impose any further restrictions on the exercise of the
+rights granted or affirmed under this License.  For example, you may
+not impose a license fee, royalty, or other charge for exercise of
+rights granted under this License, and you may not initiate litigation
+(including a cross-claim or counterclaim in a lawsuit) alleging that
+any patent claim is infringed by making, using, selling, offering for
+sale, or importing the Program or any portion of it.
+
+  11. Patents.
+
+  A "contributor" is a copyright holder who authorizes use under this
+License of the Program or a work on which the Program is based.  The
+work thus licensed is called the contributor's "contributor version".
+
+  A contributor's "essential patent claims" are all patent claims
+owned or controlled by the contributor, whether already acquired or
+hereafter acquired, that would be infringed by some manner, permitted
+by this License, of making, using, or selling its contributor version,
+but do not include claims that would be infringed only as a
+consequence of further modification of the contributor version.  For
+purposes of this definition, "control" includes the right to grant
+patent sublicenses in a manner consistent with the requirements of
+this License.
+
+  Each contributor grants you a non-exclusive, worldwide, royalty-free
+patent license under the contributor's essential patent claims, to
+make, use, sell, offer for sale, import and otherwise run, modify and
+propagate the contents of its contributor version.
+
+  In the following three paragraphs, a "patent license" is any express
+agreement or commitment, however denominated, not to enforce a patent
+(such as an express permission to practice a patent or covenant not to
+sue for patent infringement).  To "grant" such a patent license to a
+party means to make such an agreement or commitment not to enforce a
+patent against the party.
+
+  If you convey a covered work, knowingly relying on a patent license,
+and the Corresponding Source of the work is not available for anyone
+to copy, free of charge and under the terms of this License, through a
+publicly available network server or other readily accessible means,
+then you must either (1) cause the Corresponding Source to be so
+available, or (2) arrange to deprive yourself of the benefit of the
+patent license for this particular work, or (3) arrange, in a manner
+consistent with the requirements of this License, to extend the patent
+license to downstream recipients.  "Knowingly relying" means you have
+actual knowledge that, but for the patent license, your conveying the
+covered work in a country, or your recipient's use of the covered work
+in a country, would infringe one or more identifiable patents in that
+country that you have reason to believe are valid.
+
+  If, pursuant to or in connection with a single transaction or
+arrangement, you convey, or propagate by procuring conveyance of, a
+covered work, and grant a patent license to some of the parties
+receiving the covered work authorizing them to use, propagate, modify
+or convey a specific copy of the covered work, then the patent license
+you grant is automatically extended to all recipients of the covered
+work and works based on it.
+
+  A patent license is "discriminatory" if it does not include within
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
+
+  Nothing in this License shall be construed as excluding or limiting
+any implied license or other defenses to infringement that may
+otherwise be available to you under applicable patent law.
+
+  12. No Surrender of Others' Freedom.
+
+  If conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot convey a
+covered work so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you may
+not convey it at all.  For example, if you agree to terms that obligate you
+to collect a royalty for further conveying from those to whom you convey
+the Program, the only way you could satisfy both those terms and this
+License would be to refrain entirely from conveying the Program.
+
+  13. Use with the GNU Affero General Public License.
+
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU Affero General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the special requirements of the GNU Affero General Public License,
+section 13, concerning interaction through a network will apply to the
+combination as such.
+
+  14. Revised Versions of this License.
+
+  The Free Software Foundation may publish revised and/or new versions of
+the GNU General Public License from time to time.  Such new versions will
+be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+  Each version is given a distinguishing version number.  If the
+Program specifies that a certain numbered version of the GNU General
+Public License "or any later version" applies to it, you have the
+option of following the terms and conditions either of that numbered
+version or of any later version published by the Free Software
+Foundation.  If the Program does not specify a version number of the
+GNU General Public License, you may choose any version ever published
+by the Free Software Foundation.
+
+  If the Program specifies that a proxy can decide which future
+versions of the GNU General Public License can be used, that proxy's
+public statement of acceptance of a version permanently authorizes you
+to choose that version for the Program.
+
+  Later license versions may give you additional or different
+permissions.  However, no additional obligations are imposed on any
+author or copyright holder as a result of your choosing to follow a
+later version.
+
+  15. Disclaimer of Warranty.
+
+  THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
+APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
+HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
+OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. Limitation of Liability.
+
+  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+  17. Interpretation of Sections 15 and 16.
+
+  If the disclaimer of warranty and limitation of liability provided
+above cannot be given local legal effect according to their terms,
+reviewing courts shall apply local law that most closely approximates
+an absolute waiver of all civil liability in connection with the
+Program, unless a warranty or assumption of liability accompanies a
+copy of the Program in return for a fee.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+state the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    &lt;one line to give the program's name and a brief idea of what it does.&gt;
+    Copyright (C) &lt;year&gt;  &lt;name of author&gt;
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.
+
+Also add information on how to contact you by electronic and paper mail.
+
+  If the program does terminal interaction, make it output a short
+notice like this when it starts in an interactive mode:
+
+    &lt;program&gt;  Copyright (C) &lt;year&gt;  &lt;name of author&gt;
+    This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions; type `show c' for details.
+
+The hypothetical commands `show w' and `show c' should show the appropriate
+parts of the General Public License.  Of course, your program's commands
+might be different; for a GUI interface, you would use an "about box".
+
+  You should also get your employer (if you work as a programmer) or school,
+if any, to sign a "copyright disclaimer" for the program, if necessary.
+For more information on this, and how to apply and follow the GNU GPL, see
+&lt;https://www.gnu.org/licenses/&gt;.
+
+  The GNU General Public License does not permit incorporating your program
+into proprietary programs.  If your program is a subroutine library, you
+may consider it more useful to permit linking proprietary applications with
+the library.  If this is what you want to do, use the GNU Lesser General
+Public License instead of this License.  But first, please read
+&lt;https://www.gnu.org/licenses/why-not-lgpl.html&gt;.
+</pre></details></details>
+    <footer><span>Cueframe</span><span>Subtitle and audio files stay on this device.</span></footer>
+  </main>
+  <script>
+// Retiming edits spans in the original text. Dialogue and cue metadata never pass through a serializer.
+(function () {
+  'use strict';
+
+  const stamp = '(\\d+:\\d{2}:\\d{2}[,.]\\d{1,3})';
+  const timingLine = new RegExp('^([ \\t]*)' + stamp + '([ \\t]*-->[ \\t]*)' + stamp + '(?:[ \\t].*)?$');
+
+  function decode(buffer, encoding = 'auto') {
+    const bytes = ArrayBuffer.isView(buffer)
+      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      : new Uint8Array(buffer);
+    const auto = !encoding || encoding.trim().toLowerCase() === 'auto';
+    if (auto) {
+      if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
+      else if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
+      else encoding = 'utf-8';
+    }
+    let decoded;
+    try {
+      decoded = new TextDecoder(encoding, { fatal: true, ignoreBOM: true }).decode(bytes);
+    } catch {
+      if (auto) throw new Error('Choose the file’s text encoding. It is not valid UTF-8 and has no usable Unicode encoding signature.');
+      throw new Error('Cannot decode this file with the selected encoding (' + encoding + '). Choose the encoding used by this subtitle.');
+    }
+    if (decoded.includes('\0')) {
+      throw new Error('Unexpected NUL characters. Choose the file’s text encoding, such as UTF-16LE, or select a text subtitle.');
+    }
+    return decoded;
+  }
+
+  // Short inputs are convenient when entering anchors, e.g. "83.4" or "1:23,4".
+  function parseTime(value) {
+    const input = String(value).trim();
+    const parts = input.replace(',', '.').split(':');
+    if (parts.length > 3 || !/^\d+(?:\.\d{1,3})?$/.test(parts[parts.length - 1])
+      || parts.slice(0, -1).some(part => !/^\d+$/.test(part))) {
+      throw new Error('Enter a time such as 00:02:34,550, 2:34.55, or 154.55.');
+    }
+    const [seconds, fraction = ''] = parts.pop().split('.');
+    if (parts.length && Number(seconds) >= 60 || parts.length === 2 && Number(parts[1]) >= 60) {
+      throw new Error('Minutes and seconds in a clock time must be below 60.');
+    }
+    const whole = parts.reduce((sum, part) => sum * 60 + Number(part), 0) * 60 + Number(seconds);
+    const ms = whole * 1000 + Number(fraction.padEnd(3, '0'));
+    if (!Number.isSafeInteger(ms)) throw new Error('Time is outside the supported range.');
+    return ms;
+  }
+
+  function clockFields(ms) {
+    const time = Math.round(ms);
+    if (!Number.isSafeInteger(time) || time < 0) throw new Error('A subtitle time must be finite and nonnegative.');
+    return [
+      String(Math.floor(time / 3600000)),
+      String(Math.floor(time / 60000) % 60).padStart(2, '0'),
+      String(Math.floor(time / 1000) % 60).padStart(2, '0'),
+      String(time % 1000).padStart(3, '0'),
+    ];
+  }
+
+  function formatTime(ms) {
+    const [hours, minutes, seconds, fraction] = clockFields(ms);
+    return hours.padStart(2, '0') + ':' + minutes + ':' + seconds + ',' + fraction;
+  }
+
+  function formatLike(ms, original) {
+    const [hours, minutes, seconds, fraction] = clockFields(ms);
+    const delimiter = original.includes(',') ? ',' : '.';
+    const precision = Math.max(original.split(delimiter)[1].length, fraction.replace(/0+$/, '').length);
+    return hours.padStart(original.indexOf(':'), '0') + ':' + minutes + ':' + seconds + delimiter + fraction.slice(0, precision);
+  }
+
+  function parse(text) {
+    if (typeof text !== 'string') throw new Error('Select an SRT text file.');
+    const cues = [];
+    let block = [];
+    function readBlock() {
+      if (!block.length) return;
+      let row = 0;
+      let tokens = timingLine.exec(block[0].line);
+      if (!tokens && block.length > 1) {
+        row = 1;
+        tokens = timingLine.exec(block[row].line);
+      }
+      if (!tokens) throw new Error('Invalid SRT timing near line ' + block[0].number + '. Expected 00:00:01,000 --> 00:00:02,000.');
+      const timing = block[row];
+      const start = parseTime(tokens[2]);
+      const end = parseTime(tokens[4]);
+      if (end <= start) throw new Error('The subtitle at line ' + timing.number + ' must end after it starts.');
+      const body = block.slice(row + 1);
+      for (let i = 1; i < body.length; i++) {
+        if (/^\s*\d+\s*$/.test(body[i - 1].line) && timingLine.test(body[i].line)) {
+          throw new Error('Missing blank line before the cue at line ' + body[i].number + '.');
+        }
+      }
+      const startAt = timing.at + tokens[1].length;
+      const endAt = startAt + tokens[2].length + tokens[3].length;
+      const last = block[block.length - 1];
+      cues.push({
+        start, end,
+        text: body.length ? text.slice(body[0].at, last.at + last.line.length) : '',
+        startAt, endAt, startToken: tokens[2], endToken: tokens[4],
+      });
+      block = [];
+    }
+    // Starting after a Unicode BOM keeps its original location, including on an index-less first cue.
+    const lines = /([^\r\n]*)(?:\r\n|\r|\n|$)/g;
+    lines.lastIndex = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+    let number = 0;
+    let line;
+    while ((line = lines.exec(text)) && line[0].length) {
+      number++;
+      if (/^[ \t]*$/.test(line[1])) readBlock();
+      else block.push({ line: line[1], at: line.index, number });
+    }
+    readBlock();
+    if (!cues.length) throw new Error('No subtitle cues found. Select an SRT file.');
+    return { text, cues };
+  }
+
+  function render(parsed, map) {
+    const chunks = [];
+    let cursor = 0;
+    for (const [i, cue] of parsed.cues.entries()) {
+      const start = Math.round(map(cue.start));
+      const end = Math.round(map(cue.end));
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) {
+        throw new Error('Cue ' + (i + 1) + ' has an invalid corrected time. Check the timing correction.');
+      }
+      if (start < 0) {
+        throw new Error('Cue ' + (i + 1) + ' would start before 00:00:00,000. Adjust the correction or edit that cue before exporting.');
+      }
+      if (end <= start) throw new Error('Cue ' + (i + 1) + ' would have zero or negative duration. Adjust the correction before exporting.');
+      chunks.push(parsed.text.slice(cursor, cue.startAt), formatLike(start, cue.startToken),
+        parsed.text.slice(cue.startAt + cue.startToken.length, cue.endAt), formatLike(end, cue.endToken));
+      cursor = cue.endAt + cue.endToken.length;
+    }
+    chunks.push(parsed.text.slice(cursor));
+    return chunks.join('');
+  }
+
+  function anchors(points) {
+    if (!Array.isArray(points) || !points.length) throw new Error('Add at least one pair of matching times.');
+    const pairs = points.map(({ source, target }, i) => {
+      if (![source, target].every(value => Number.isSafeInteger(value) && value >= 0)) {
+        throw new Error('Anchor ' + (i + 1) + ' needs two nonnegative times.');
+      }
+      return { source, target };
+    });
+    for (let i = 1; i < pairs.length; i++) {
+      if (pairs[i].source <= pairs[i - 1].source || pairs[i].target <= pairs[i - 1].target) {
+        throw new Error('Add anchors in increasing order in both timelines. Check anchor ' + (i + 1) + '.');
+      }
+    }
+    if (pairs.length === 1) {
+      const shift = pairs[0].target - pairs[0].source;
+      return time => time + shift;
+    }
+    return time => {
+      // Use the nearest segment outside the anchor range so drift continues through the end credits.
+      let left = 0, right = pairs.length - 1;
+      while (right - left > 1) {
+        const middle = Math.floor((left + right) / 2);
+        if (time < pairs[middle].source) right = middle;
+        else left = middle;
+      }
+      const a = pairs[left], b = pairs[right];
+      return a.target + (time - a.source) * (b.target - a.target) / (b.source - a.source);
+    };
+  }
+
+  const api = { decode, parse, parseTime, formatTime, render, anchors };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  globalThis.SyncSrt = api;
+})();
+
+</script>
+  <script id="align-engine">
+/* Original browser rewrite. SPDX-License-Identifier: GPL-3.0-or-later */
+// All times are in milliseconds.
+(function (root) {
+  "use strict";
+
+  const commonRates = [1, 24 / 25, 25 / 24, 24000 / 25025, 25025 / 24000, 1000 / 1001, 1001 / 1000];
+  const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+  const failure = reason => ({ offsetMs: 0, scale: 1, score: 0, reliable: false, reason });
+
+  function ordered(cues) {
+    return cues.filter(c => c && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end > c.start)
+      .sort((a, b) => a.start - b.start);
+  }
+
+  function extent(cues) {
+    return [cues[0].start, cues.reduce((v, c) => Math.max(v, c.end), cues[0].end)];
+  }
+
+  function cueActivity(cues, step) {
+    const [origin, end] = extent(cues);
+    const values = new Float32Array(Math.ceil((end - origin) / step) + 1);
+    const delta = new Int32Array(values.length + 1);
+    for (const cue of cues) {
+      const a = (cue.start - origin) / step, b = (cue.end - origin) / step;
+      const i = Math.floor(a), j = Math.floor(b);
+      if (i === j) {
+        values[i] += b - a;
+        continue;
+      }
+      values[i] += i + 1 - a;
+      values[j] += b - j;
+      delta[i + 1]++;
+      delta[j]--;
+    }
+    let active = 0;
+    for (let i = 0; i < values.length; i++) {
+      active += delta[i];
+      values[i] = Math.min(1, active + values[i]);
+    }
+    return { values, origin };
+  }
+
+  function audioActivity(ref, step) {
+    const width = step / ref.stepMs;
+    if (width === 1) return { values: ref.activity, origin: 0 };
+    const values = new Float32Array(Math.ceil(ref.activity.length / width));
+    for (let i = 0; i < values.length; i++) {
+      const a = i * width, b = Math.min((i + 1) * width, ref.activity.length);
+      for (let j = Math.floor(a); j < b; j++) {
+        values[i] += ref.activity[j] * (Math.min(b, j + 1) - Math.max(a, j)) / (b - a);
+      }
+    }
+    return { values, origin: 0 };
+  }
+
+  // A regularly repeated motif cannot identify a unique release offset.
+  function hasRepeatingPattern(cues) {
+    for (let lag = 1; lag <= Math.min(12, Math.floor((cues.length - 1) / 3)); lag++) {
+      let matches = 0;
+      const count = cues.length - lag - 1;
+      for (let i = 0; i < count; i++) {
+        const a = cues[i], b = cues[i + lag];
+        const gapA = cues[i + 1].start - a.start, gapB = cues[i + lag + 1].start - b.start;
+        if (Math.abs(gapA - gapB) < 80 && Math.abs((a.end - a.start) - (b.end - b.start)) < 80) matches++;
+      }
+      if (matches / count >= 0.95) return true;
+    }
+    return false;
+  }
+
+  // Radix-2 FFT. One transform of the entire reference is shared by all windows.
+  function fft(re, im, inverse) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) {
+        [re[i], re[j]] = [re[j], re[i]];
+        [im[i], im[j]] = [im[j], im[i]];
+      }
+    }
+    for (let size = 2; size <= n; size *= 2) {
+      const half = size >> 1, theta = (inverse ? 2 : -2) * Math.PI / size;
+      const c = Math.cos(theta), s = Math.sin(theta);
+      for (let base = 0; base < n; base += size) {
+        let wr = 1, wi = 0;
+        for (let j = 0; j < half; j++) {
+          const a = base + j, b = a + half;
+          const tr = wr * re[b] - wi * im[b], ti = wr * im[b] + wi * re[b];
+          re[b] = re[a] - tr; im[b] = im[a] - ti;
+          re[a] += tr; im[a] += ti;
+          const nr = wr * c - wi * s;
+          wi = wr * s + wi * c; wr = nr;
+        }
+      }
+    }
+    if (inverse) for (let i = 0; i < n; i++) re[i] /= n;
+  }
+
+  function findWindows(cues, source, ref, step) {
+    // A short excerpt stays identifiable even with an unknown 24/25 fps conversion.
+    const length = Math.min(ref.values.length, Math.max(1, Math.min(
+      Math.round(37000 / step), Math.round(source.values.length * 0.52))));
+    if (length < 12) return [];
+    const n = 2 ** Math.ceil(Math.log2(ref.values.length + length));
+    const reRef = new Float64Array(n), imRef = new Float64Array(n);
+    const sum = new Float64Array(ref.values.length + 1), sq = new Float64Array(sum.length);
+    for (let i = 0; i < ref.values.length; i++) {
+      const v = ref.values[i];
+      reRef[i] = v; sum[i + 1] = sum[i] + v; sq[i + 1] = sq[i] + v * v;
+    }
+    fft(reRef, imRef, false);
+    const windows = [];
+    let previous = -Infinity;
+    const re = new Float64Array(n), im = new Float64Array(n);
+    for (let k = 0; k < 11; k++) {
+      const center = cues[Math.floor((cues.length - 1) * k / 10)];
+      const expected = ((center.start + center.end) / 2 - source.origin) / step;
+      const left = clamp(Math.round(expected - length / 2), 0, source.values.length - length);
+      if (left - previous < Math.max(3, length / 7)) continue;
+      previous = left;
+      let avg = 0;
+      for (let j = 0; j < length; j++) avg += source.values[left + j] / length;
+      re.fill(0); im.fill(0);
+      let variance = 0;
+      for (let j = 0; j < length; j++) {
+        const v = source.values[left + j] - avg;
+        re[length - 1 - j] = v; variance += v * v;
+      }
+      if (variance < 0.018 * length) continue;
+      fft(re, im, false);
+      for (let i = 0; i < n; i++) {
+        const real = re[i] * reRef[i] - im[i] * imRef[i];
+        im[i] = re[i] * imRef[i] + im[i] * reRef[i]; re[i] = real;
+      }
+      fft(re, im, true);
+      const peaks = [];
+      const separation = Math.max(3, Math.ceil(1600 / step));
+      let best = null;
+      for (let i = 0; i + length <= ref.values.length; i++) {
+        const total = sum[i + length] - sum[i];
+        const energy = sq[i + length] - sq[i] - total * total / length;
+        const value = energy > 1e-9 ? re[i + length - 1] / Math.sqrt(variance * energy) : 0;
+        if (best && i - best.pos > separation) { peaks.push(best); best = null; }
+        if (value >= 0.18 && (!best || value > best.value)) best = { pos: i, value };
+      }
+      if (best) peaks.push(best);
+      peaks.sort((a, b) => b.value - a.value);
+      const strong = [];
+      for (const p of peaks) {
+        if (strong.some(q => Math.abs(q.pos - p.pos) < separation)) continue;
+        strong.push(p);
+        if (strong.length === 12) break;
+      }
+      if (strong.length) windows.push({
+        x: source.origin + (left + length / 2) * step,
+        peaks: strong.map(p => ({ y: ref.origin + (p.pos + length / 2) * step, r: p.value }))
+      });
+    }
+    return windows;
+  }
+
+  function propose(windows, first, span) {
+    const ranked = [];
+    function add(scale, offset) {
+      if (scale < 0.94 || scale > 1.06) return;
+      let vote = 0;
+      for (const w of windows) {
+        const y = w.x * scale + offset;
+        let top = 0;
+        for (const p of w.peaks) {
+          const error = Math.abs(p.y - y);
+          if (error < 1300) top = Math.max(top, p.r * Math.exp(-error * error / 620000));
+        }
+        vote += top;
+      }
+      ranked.push({ scale, offset, vote });
+    }
+    for (let i = 0; i < windows.length; i++) {
+      const a = windows[i];
+      for (const p of a.peaks) {
+        for (const scale of commonRates) add(scale, p.y - scale * a.x);
+        for (let j = i + 1; j < windows.length; j++) {
+          const b = windows[j];
+          if (b.x - a.x < span * 0.18) continue;
+          for (const q of b.peaks) {
+            const scale = (q.y - p.y) / (b.x - a.x);
+            add(scale, p.y - scale * a.x);
+          }
+        }
+      }
+    }
+    ranked.sort((a, b) => b.vote - a.vote);
+    const finalists = [];
+    for (const c of ranked) {
+      if (finalists.some(f => distance(f, c, first, span) < 600)) continue;
+      finalists.push(c);
+      if (finalists.length === 24) break;
+    }
+    return finalists;
+  }
+
+  // Difference in predicted release time measured near both ends of the source.
+  function distance(a, b, first, span) {
+    const d = (a.scale - b.scale) * first + (a.offset - b.offset);
+    return Math.max(Math.abs(d), Math.abs(d + span * (a.scale - b.scale)));
+  }
+
+  function evaluate(source, ref, step, c, stride, segments) {
+    const x = source.values, y = ref.values;
+    const base = (c.scale * (source.origin + step / 2) + c.offset - ref.origin) / step - 0.5;
+    const scores = [];
+    let observations = 0, total = 0, weakest = 1;
+    for (let g = 0; g < segments; g++) {
+      let sx = 0, sy = 0, xx = 0, yy = 0, xy = 0, n = 0;
+      const lo = Math.floor(x.length * g / segments), hi = Math.floor(x.length * (g + 1) / segments);
+      for (let i = lo; i < hi; i += stride) {
+        const u = i * c.scale + base, j = Math.floor(u);
+        if (j < 0 || j >= y.length - 1) continue;
+        const a = x[i], b = y[j] + (y[j + 1] - y[j]) * (u - j);
+        sx += a; sy += b; xx += a * a; yy += b * b; xy += a * b; n++;
+      }
+      const available = Math.ceil((hi - lo) / stride);
+      total += available; observations += n;
+      if (n < Math.max(6, available * 0.5)) continue;
+      const variance = Math.max(0, xx - sx * sx / n) * Math.max(0, yy - sy * sy / n);
+      const r = variance > 1e-8 ? (xy - sx * sy / n) / Math.sqrt(variance) : 0;
+      weakest = Math.min(weakest, r);
+      scores.push(r);
+    }
+    const mean = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    const coverage = observations / Math.max(1, total);
+    return { r: mean * Math.sqrt(coverage), weakest, coverage, segments: scores.length };
+  }
+
+  function refine(source, ref, step, c, span, stride, segments) {
+    let current = c, best = evaluate(source, ref, step, c, stride, segments).r;
+    for (const delta of [400, 160, 65, 25]) {
+      const seed = current;
+      for (const left of [-delta, 0, delta]) {
+        for (const right of [-delta, 0, delta]) {
+          const ds = (right - left) / span, scale = seed.scale + ds;
+          if (scale < 0.94 || scale > 1.06) continue;
+          const trial = { offset: seed.offset + left - source.origin * ds, scale };
+          const score = evaluate(source, ref, step, trial, stride, segments).r;
+          if (score > best) { best = score; current = trial; }
+        }
+      }
+    }
+    return current;
+  }
+
+  function nearest(sorted, t) {
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (sorted[mid] < t) lo = mid + 1; else hi = mid;
+    }
+    const a = sorted[Math.max(0, lo - 1)], b = sorted[Math.min(lo, sorted.length - 1)];
+    return Math.abs(t - a) < Math.abs(t - b) ? a : b;
+  }
+
+  // Restore millisecond precision when two language tracks share actual cue boundaries.
+  function snapToBoundaries(cues, refCues, c) {
+    const starts = refCues.map(x => x.start), ends = refCues.map(x => x.end).sort((a, b) => a - b);
+    let candidate = c;
+    for (const tolerance of [260, 100, 40]) {
+      const pairs = [];
+      const stride = Math.max(1, Math.floor(cues.length / 4000));
+      for (let i = 0; i < cues.length; i += stride) {
+        for (const [x, list] of [[cues[i].start, starts], [cues[i].end, ends]]) {
+          const expected = x * candidate.scale + candidate.offset, y = nearest(list, expected);
+          if (Math.abs(y - expected) <= tolerance) pairs.push([x, y]);
+        }
+      }
+      if (pairs.length < Math.max(6, 2 * Math.ceil(cues.length / stride) * 0.54)) return c;
+      let mx = 0, my = 0;
+      for (const [x, y] of pairs) { mx += x / pairs.length; my += y / pairs.length; }
+      let xx = 0, xy = 0;
+      for (const [x, y] of pairs) { xx += (x - mx) ** 2; xy += (x - mx) * (y - my); }
+      if (!xx) return c;
+      const scale = xy / xx;
+      if (scale < 0.94 || scale > 1.06) return c;
+      candidate = { scale, offset: my - scale * mx };
+    }
+    return candidate;
+  }
+
+  function align(input, reference, options = {}) {
+    if (!Array.isArray(input)) return failure("Choose a subtitle track to sync.");
+    const cues = ordered(input);
+    if (cues.length < 4) return failure("At least four dialogue cues are needed for automatic matching.");
+    if (hasRepeatingPattern(cues)) return failure("The cue pattern repeats. Use matching dialogue lines as manual anchors.");
+    const audio = !Array.isArray(reference);
+    const refCues = audio ? null : ordered(reference);
+    if (audio && (!reference || !reference.activity || !(reference.stepMs > 0) || !reference.activity.length))
+      return failure("The audio reference has no usable activity.");
+    if (refCues && refCues.length < 4) return failure("The reference has too few dialogue cues for automatic matching.");
+    const [first, last] = extent(cues), span = last - first;
+    const refBounds = audio ? [0, reference.stepMs * reference.activity.length] : extent(refCues);
+    const maxSpan = Math.max(span, refBounds[1] - refBounds[0]);
+    if (!Number.isFinite(maxSpan) || maxSpan <= 0) return failure("The track duration is invalid.");
+    const step = Math.max(100, Math.ceil(maxSpan / 120000), audio ? reference.stepMs : 0);
+    const source = cueActivity(cues, step), ref = audio ? audioActivity(reference, step) : cueActivity(refCues, step);
+    const windows = findWindows(cues, source, ref, step);
+    if (!windows.length) return failure("No clear dialogue pattern was found in the reference.");
+    const candidates = propose(windows, first, span);
+    if (!candidates.length) return failure("The reference did not yield a consistent timing match.");
+    const stride = Math.max(1, Math.floor(source.values.length / 16000));
+    const segments = span >= 180000 && cues.length >= 25 ? 4 : 1;
+    for (const c of candidates) c.r = evaluate(source, ref, step, c, stride, segments).r;
+    candidates.sort((a, b) => b.r - a.r);
+    let best = refine(source, ref, step, candidates[0], span, stride, segments);
+    if (refCues) best = snapToBoundaries(cues, refCues, best);
+    const result = evaluate(source, ref, step, best, stride, segments);
+    const rival = candidates.find(c => distance(c, best, first, span) > 1900 && c.r > result.r - 0.055);
+    const votes = windows.filter(w => w.peaks.some(p => Math.abs(w.x * best.scale + best.offset - p.y) < 1100)).length;
+    const supported = votes >= Math.max(2, Math.ceil(windows.length * 0.45));
+    const continuous = result.segments === segments && result.weakest > (audio ? 0.14 : 0.25);
+    const score = clamp(result.r, 0, 1);
+    // Short tracks contain fewer independent pauses; chance fits are much more common.
+    let minimumScore = audio ? 0.39 : 0.50;
+    if (cues.length < 8) minimumScore = 0.90;
+    else if (cues.length < 18) minimumScore = 0.78;
+    else if (cues.length < 30) minimumScore = 0.62;
+    const reliable = score >= minimumScore && result.coverage >= 0.76 && supported && continuous && !rival;
+    let reason = "Dialogue timing matches across the track. Check the beginning and end before exporting.";
+    if (!reliable) {
+      reason = rival ? "Several timings fit this pattern. Check the proposed timing or set manual anchors."
+        : "The tracks do not show a consistent dialogue match. Try another reference or set manual anchors.";
+    }
+    return { offsetMs: Math.round(best.offset), scale: best.scale, score, reliable, reason };
+  }
+
+  const api = { align };
+  root.SyncAlign = api;
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+})(globalThis);
+
+</script>
+  <script id="audio-engine">
+/* Original browser rewrite. SPDX-License-Identifier: GPL-3.0-or-later */
+(function (root) {
+  'use strict';
+
+  const STEP_MS = 100;
+  const READ_BYTES = 1024 * 1024;
+  const WAV_HELP = 'Choose a PCM WAV file, or export the dialogue track as a mono, 16 kHz PCM WAV.';
+
+  function checkAbort(signal) {
+    if (signal && signal.aborted) throw new DOMException('Analysis cancelled.', 'AbortError');
+  }
+
+  function fourCC(view, pos) {
+    return String.fromCharCode(...new Uint8Array(view.buffer, view.byteOffset + pos, 4));
+  }
+
+  async function read(file, from, length, signal) {
+    checkAbort(signal);
+    const buffer = await file.slice(from, from + length).arrayBuffer();
+    checkAbort(signal);
+    if (buffer.byteLength !== length) throw new Error('The WAV file is incomplete.');
+    return new DataView(buffer);
+  }
+
+  function parseFormat(view) {
+    if (view.byteLength < 16) throw new Error('The WAV format header is incomplete.');
+    let tag = view.getUint16(0, true);
+    const channels = view.getUint16(2, true);
+    const rate = view.getUint32(4, true);
+    const stride = view.getUint16(12, true);
+    const bits = view.getUint16(14, true);
+    let mask = 0;
+    if (tag === 0xfffe) {
+      if (view.byteLength < 40 || view.getUint16(16, true) < 22) throw new Error('The extended WAV format header is incomplete.');
+      const suffix = [0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71];
+      if (!suffix.every((value, i) => value === view.getUint8(28 + i))) throw new Error(WAV_HELP);
+      tag = view.getUint32(24, true);
+      mask = view.getUint32(20, true);
+    }
+
+    if (channels < 1 || rate < 1000 || rate > 768000 || stride !== channels * bits / 8) throw new Error(WAV_HELP);
+    const validBits = tag === 1 ? [8, 16, 24, 32] : tag === 3 ? [32, 64] : [];
+    if (!validBits.includes(bits)) throw new Error(WAV_HELP);
+    return {tag, channels, rate, stride, bits, mask};
+  }
+
+  function readSize64(view, offset) {
+    const n = Number(view.getBigUint64(offset, true));
+    if (!Number.isSafeInteger(n)) throw new Error('The WAV file size is too large.');
+    return n;
+  }
+
+  async function inspect(file, signal) {
+    if (!file || typeof file.slice !== 'function' || file.size < 12) throw new Error(WAV_HELP);
+    const header = await read(file, 0, 12, signal);
+    const riff = fourCC(header, 0);
+    if ((riff !== 'RIFF' && riff !== 'RF64') || fourCC(header, 8) !== 'WAVE') throw new Error(WAV_HELP);
+    const declared = header.getUint32(4, true);
+    let end = declared === 0xffffffff ? file.size : declared + 8;
+    if (end > file.size) throw new Error('The WAV file is incomplete.');
+    let format;
+    const chunks = [];
+    let rf64DataSize;
+    // Skip metadata using headers only. Embedded cover art can be larger than the audio read buffer.
+    for (let at = 12; at + 8 <= end;) {
+      const chunk = await read(file, at, 8, signal);
+      const name = fourCC(chunk, 0);
+      let size = chunk.getUint32(4, true);
+      at += 8;
+      if (size === 0xffffffff) {
+        if (name !== 'data' || rf64DataSize === undefined) throw new Error('This WAV has no finalized length. ' + WAV_HELP);
+        size = rf64DataSize;
+      }
+      if (at + size > end) throw new Error('The WAV file is incomplete.');
+      if (name === 'fmt ') format = parseFormat(await read(file, at, Math.min(size, 40), signal));
+      if (name === 'ds64' && riff === 'RF64' && size >= 28) {
+        const sizes = await read(file, at, 28, signal);
+        end = readSize64(sizes, 0) + 8;
+        if (end > file.size) throw new Error('The WAV file is incomplete.');
+        rf64DataSize = readSize64(sizes, 8);
+      }
+      if (name === 'data' && size) chunks.push({offset: at, size});
+      at += size + (size % 2);
+    }
+    if (!format || !chunks.length) throw new Error('The WAV file contains no readable audio. ' + WAV_HELP);
+    if (chunks.some(chunk => chunk.size % format.stride !== 0)) throw new Error('The WAV file ends in a partial sample frame.');
+    return {format, chunks};
+  }
+
+  function sampleReader(format) {
+    if (format.tag === 3) {
+      const method = format.bits === 32 ? 'getFloat32' : 'getFloat64';
+      return (view, pos) => {
+        const value = view[method](pos, true);
+        return Number.isFinite(value) ? Math.min(1, Math.max(-1, value)) : 0;
+      };
+    }
+    switch (format.bits) {
+      case 8: return (view, pos) => (view.getUint8(pos) - 128) / 128;
+      case 16: return (view, pos) => view.getInt16(pos, true) / 32768;
+      case 24: return (view, pos) => (view.getUint16(pos, true) + 65536 * view.getInt8(pos + 2)) / 8388608;
+      case 32: return (view, pos) => view.getInt32(pos, true) / 2147483648;
+    }
+  }
+
+  function mixReader(format) {
+    const sample = sampleReader(format);
+    if (format.channels === 1) return sample;
+    const bytes = format.bits / 8;
+    // WAV speaker-mask channels follow ascending bit order (front left, right, then centre).
+    const hasFrontThree = format.mask ? (format.mask & 7) === 7 : format.channels === 3 || format.channels >= 5;
+    if (hasFrontThree) {
+      return (view, at) => 0.60 * sample(view, at + 2 * bytes) + 0.22 * sample(view, at) + 0.18 * sample(view, at + bytes);
+    }
+    // An asymmetric mix also retains dialogue in opposite-phase stereo recordings.
+    return (view, at) => 0.60 * sample(view, at) + 0.40 * sample(view, at + bytes);
+  }
+
+  function quantile(histogram, count, fraction) {
+    let target = Math.max(1, Math.ceil(count * fraction));
+    for (let level = 0; level < histogram.length; level++) {
+      target -= histogram[level];
+      if (target <= 0) return level;
+    }
+    return 0;
+  }
+
+  function activityFromLevels(levels, quality) {
+    const histogram = new Uint32Array(97);
+    for (const level of levels) histogram[level]++;
+    const globalFloor = quantile(histogram, levels.length, 0.25);
+    const activity = new Float32Array(levels.length);
+    const radius = 100; // Ten seconds on either side follows changes in scene loudness.
+    histogram.fill(0);
+    let left = 0;
+    let right = 0;
+    for (let i = 0; i < levels.length; i++) {
+      while (right < levels.length && right <= i + radius) histogram[levels[right++]]++;
+      while (left < i - radius) histogram[levels[left++]]--;
+      const floor = Math.min(globalFloor + 8, quantile(histogram, right - left, 0.15));
+      const contrast = (levels[i] - Math.max(15, floor) - 2) / 11;
+      activity[i] = Math.max(0, Math.min(1, contrast)) * quality[i] / 255;
+    }
+    return activity;
+  }
+
+  function createBandMeter(rate) {
+    const hpMix = 1 - Math.exp(-2 * Math.PI * 160 / rate);
+    const lpMix = 1 - Math.exp(-2 * Math.PI * Math.min(3300, rate * 0.40) / rate);
+    let low = 0, low2 = 0, band = 0, energy = 0, broad = 0;
+    return {
+      sample(x) {
+        // Two high-pass stages attenuate rumble. The low-pass stage attenuates hiss.
+        low += hpMix * (x - low);
+        const first = x - low;
+        low2 += hpMix * (first - low2);
+        band += lpMix * (first - low2 - band);
+        energy += band * band;
+        broad += x * x;
+      },
+      writeBin(levels, quality, bin, frames) {
+        const power = energy / frames;
+        levels[bin] = Math.min(96, Math.max(0, Math.round(96 + 10 * Math.log10(power + 1e-14))));
+        quality[bin] = Math.round(255 * Math.min(1, 4 * energy / (broad + 1e-12)));
+        energy = 0;
+        broad = 0;
+      },
+      resetFilter() { low = 0; low2 = 0; band = 0; }
+    };
+  }
+
+  async function readWavActivity(file, {onProgress, signal} = {}) {
+    const {format, chunks} = await inspect(file, signal);
+    const {rate, stride} = format;
+    const frames = chunks.reduce((sum, c) => sum + c.size / stride, 0);
+    const count = Math.ceil(frames * 10 / rate);
+    const levels = new Uint8Array(count);
+    const quality = new Uint8Array(count);
+    const mix = mixReader(format);
+    const meter = createBandMeter(rate);
+    let frame = 0, bin = 0, start = 0;
+    let boundary = Math.ceil(rate / 10);
+    const readFrames = Math.max(1, Math.floor(READ_BYTES / stride));
+    const record = () => {
+      meter.writeBin(levels, quality, bin, frame - start);
+      start = frame;
+      bin++;
+      boundary = Math.ceil((bin + 1) * rate / 10);
+    };
+
+    if (onProgress) onProgress(0);
+    for (const chunk of chunks) {
+      for (let offset = 0; offset < chunk.size;) {
+        const size = Math.min(readFrames * stride, chunk.size - offset);
+        const view = await read(file, chunk.offset + offset, size, signal);
+        for (let at = 0; at < size; at += stride) {
+          meter.sample(mix(view, at));
+          frame++;
+          if (frame === boundary) record();
+        }
+        offset += size;
+        if (onProgress) onProgress(frame / frames);
+      }
+    }
+    checkAbort(signal);
+    if (frame > start) record();
+    return {activity: activityFromLevels(levels, quality), stepMs: STEP_MS};
+  }
+
+  const api = {readWavActivity, createBandMeter, activityFromLevels};
+  root.SyncAudio = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(globalThis);
+
+</script>
+  <script id="mkv-engine">
+// Local Matroska text-track reader. EBML element IDs are defined by the Matroska specification.
+(function (root) {
+  "use strict";
+  const ID = {
+    ebml: 0x1a45dfa3, segment: 0x18538067, info: 0x1549a966, timeScale: 0x2ad7b1,
+    tracks: 0x1654ae6b, entry: 0xae, number: 0xd7, type: 0x83, codec: 0x86,
+    audio: 0xe1, rate: 0xb5, channels: 0x9f, private: 0x63a2,
+    name: 0x536e, lang: 0x22b59c, langIetf: 0x22b59d, defaultDuration: 0x23e383,
+    trackScale: 0x23314f, codecDelay: 0x56aa, encodings: 0x6d80, cluster: 0x1f43b675,
+    timestamp: 0xe7, simple: 0xa3, group: 0xa0, block: 0xa1, duration: 0x9b,
+  };
+  const topLevel = new Set([ID.segment, ID.cluster, ID.info, ID.tracks, 0x114d9b74,
+    0x1c53bb6b, 0x1941a469, 0x1043a770, 0x1254c367]);
+  const formats = new Map([["S_TEXT/UTF8", "SubRip"], ["S_TEXT/ASS", "ASS"],
+    ["S_TEXT/SSA", "SSA"], ["S_TEXT/WEBVTT", "WebVTT"], ["D_WEBVTT/SUBTITLES", "WebVTT"],
+    ["D_WEBVTT/CAPTIONS", "WebVTT captions"]]);
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const WINDOW = 256 * 1024;
+  const MAX_TEXT = 1024 * 1024;
+  const metadataCache = new WeakMap();
+  function malformed() { return new Error("Invalid or truncated Matroska file."); }
+  function vint(data, pos, isId = false) {
+    let marker = 128, width = 1;
+    while (marker && !(data[pos] & marker)) { marker >>= 1; width++; }
+    if (!marker || width > (isId ? 4 : 8) || pos + width > data.length) throw malformed();
+    let value = isId ? data[pos] : data[pos] - marker;
+    let unknown = !isId && value === marker - 1;
+    for (let i = 1; i < width; i++) {
+      const byte = data[pos + i];
+      value = value * 256 + byte;
+      unknown = unknown && byte === 255;
+    }
+    if (!unknown && !Number.isSafeInteger(value)) throw malformed();
+    return { value, width, unknown };
+  }
+  class Reader {
+    constructor(file, signal) {
+      if (!Number.isSafeInteger(file?.size) || typeof file?.slice !== "function") throw new Error("Choose a local Matroska file.");
+      this.file = file; this.signal = signal; this.offset = 0; this.window = new Uint8Array();
+    }
+    check() {
+      if (this.signal?.aborted) throw new DOMException("Matroska import cancelled.", "AbortError");
+    }
+    async bytes(pos, length) {
+      this.check();
+      if (pos < 0 || length < 0 || pos + length > this.file.size) throw malformed();
+      if (pos < this.offset || pos + length > this.offset + this.window.length) {
+        this.window = new Uint8Array(await this.file.slice(pos, pos + Math.max(WINDOW, length)).arrayBuffer());
+        this.offset = pos; this.check();
+      }
+      return this.window.subarray(pos - this.offset, pos - this.offset + length);
+    }
+    async header(pos, limit) {
+      const prefix = await this.bytes(pos, Math.min(12, limit - pos));
+      const id = vint(prefix, 0, true);
+      const size = vint(prefix, id.width);
+      const data = pos + id.width + size.width;
+      const end = size.unknown ? limit : data + size.value;
+      if (!Number.isSafeInteger(end) || end > limit) throw malformed();
+      if (size.unknown && id.value !== ID.cluster && id.value !== ID.segment) throw malformed();
+      return { id: id.value, data, end, unknown: size.unknown };
+    }
+    async *children(parent) {
+      for (let pos = parent.data; pos < parent.end;) {
+        const child = await this.header(pos, parent.end);
+        yield child;
+        pos = child.end;
+      }
+    }
+    async uint(el) {
+      const length = el.end - el.data;
+      if (length > 8) throw malformed();
+      let value = 0;
+      for (const byte of await this.bytes(el.data, length)) value = value * 256 + byte;
+      if (!Number.isSafeInteger(value)) throw malformed();
+      return value;
+    }
+    async float(el) {
+      const size = el.end - el.data;
+      if (size !== 4 && size !== 8) throw malformed();
+      const b = await this.bytes(el.data, size), view = new DataView(b.buffer, b.byteOffset, size);
+      const value = size === 4 ? view.getFloat32(0) : view.getFloat64(0);
+      if (!Number.isFinite(value) || value <= 0) throw malformed();
+      return value;
+    }
+    async string(el) {
+      if (el.end - el.data > MAX_TEXT) throw new Error("Embedded subtitle text exceeds 1 MiB per cue or field.");
+      return decoder.decode(await this.bytes(el.data, el.end - el.data)).replace(/\0+$/, "");
+    }
+  }
+  async function trackEntries(reader, parent) {
+    const choices = [];
+    const skipped = [];
+    for await (const entry of reader.children(parent)) {
+      if (entry.id !== ID.entry) continue;
+      const t = { language: "eng", name: "", trackScale: 1, codecDelay: 0, defaultDuration: 0 };
+      let ietf;
+      for await (const el of reader.children(entry)) {
+        switch (el.id) {
+          case ID.number: t.id = await reader.uint(el); break;
+          case ID.type: t.type = await reader.uint(el); break;
+          case ID.codec: t.codec = await reader.string(el); break;
+          case ID.name: t.name = await reader.string(el); break;
+          case ID.lang: t.language = await reader.string(el); break;
+          case ID.langIetf: ietf = await reader.string(el); break;
+          case ID.defaultDuration: t.defaultDuration = (await reader.uint(el)) / 1e6; break;
+          case ID.codecDelay: t.codecDelay = (await reader.uint(el)) / 1e6; break;
+          case ID.trackScale: t.trackScale = await reader.float(el); break;
+          case ID.private: t.privateEl = el; break;
+          case ID.audio: {
+            t.channels = 1; t.sampleRate = 8000;
+            for await (const field of reader.children(el)) {
+              if (field.id === ID.rate) t.sampleRate = await reader.float(field);
+              if (field.id === ID.channels) t.channels = await reader.uint(field);
+            }
+            break;
+          }
+          case ID.encodings: t.encoded = true; break;
+        }
+      }
+      if (t.type !== 17 && t.type !== 2) continue;
+      if (!t.id || !t.codec) throw malformed();
+      t.kind = t.type === 17 ? "text" : "audio";
+      let format = t.kind === "text" ? formats.get(t.codec) : null;
+      if (t.kind === "audio" && (t.codec === "A_OPUS" || t.codec.startsWith("A_AAC"))) {
+        if (t.privateEl && t.privateEl.end - t.privateEl.data <= 65536 && t.sampleRate && t.channels) {
+          const bytes = await reader.bytes(t.privateEl.data, t.privateEl.end - t.privateEl.data);
+          t.description = bytes.slice();
+          if (t.codec === "A_OPUS" && bytes.length >= 19 && new TextDecoder().decode(bytes.subarray(0, 8)) === "OpusHead") {
+            format = "Opus"; t.webCodec = "opus"; t.sampleRate = 48000;
+          } else if (t.codec.startsWith("A_AAC") && bytes.length >= 2 && (bytes[0] >> 3) === 2) {
+            format = "AAC-LC"; t.webCodec = "mp4a.40.2";
+            // GASpecificConfig follows the object, frequency, and channel configuration.
+            const explicitRate = ((bytes[0] & 7) * 2 + (bytes[1] >> 7)) === 15;
+            const flagByte = explicitRate ? 4 : 1;
+            if (bytes.length <= flagByte) throw malformed();
+            t.aacSamples = (bytes[flagByte] & 4) ? 960 : 1024;
+          }
+        }
+      }
+      if (!format || t.encoded) { skipped.push(t.codec + (t.encoded ? " (compressed or encrypted)" : "")); continue; }
+      t.language = ietf || t.language;
+      t.label = ["Track " + t.id, t.language, t.name, format + (t.kind === "audio" ? " audio" : " subtitles")].filter(Boolean).join(" · ");
+      choices.push(t);
+    }
+    if (choices.length) return choices;
+    const detail = skipped.length ? " Found " + [...new Set(skipped)].join(", ") + "." : "";
+    throw new Error("No readable embedded text subtitles or supported audio tracks." + detail + " Use an external SRT or mono WAV reference. Image subtitles such as PGS require OCR.");
+  }
+  async function segment(reader) {
+    const length = reader.file.size;
+    if (!length || (await reader.header(0, length)).id !== ID.ebml) throw new Error("This file is not a Matroska container.");
+    for await (const el of reader.children({ data: 0, end: length })) {
+      if (el.id === ID.segment) return el;
+    }
+    throw malformed();
+  }
+  // Only Segment and Cluster can have an unknown size. A level-one sibling ends that Cluster.
+  async function visitCluster(reader, cluster, visit) {
+    for (let pos = cluster.data; pos < cluster.end;) {
+      const el = await reader.header(pos, cluster.end);
+      if (cluster.unknown && topLevel.has(el.id)) return pos;
+      if (visit) await visit(el);
+      pos = el.end;
+    }
+    return cluster.end;
+  }
+  async function metadata(reader) {
+    reader.check();
+    const cached = metadataCache.get(reader.file);
+    if (cached) return cached;
+    const container = await segment(reader);
+    for (let pos = container.data; pos < container.end;) {
+      const el = await reader.header(pos, container.end);
+      if (el.id === ID.tracks) {
+        const choices = await trackEntries(reader, el);
+        const meta = { container, choices };
+        metadataCache.set(reader.file, meta);
+        return meta;
+      }
+      pos = el.unknown && el.id === ID.cluster ? await visitCluster(reader, el) : el.end;
+    }
+    throw new Error("The file contains no readable tracks. Use an external SRT or mono WAV reference.");
+  }
+  async function listTracks(file, { signal } = {}) {
+    const { choices } = await metadata(new Reader(file, signal));
+    return choices.map(({ id, label, language, name, codec, kind }) => ({ id, label, language, name, codec, kind }));
+  }
+  function dialogue(text, codec) {
+    // WebM stores the identifier and settings on two lines before the cue payload.
+    if (codec.startsWith("D_WEBVTT/")) {
+      const first = text.indexOf("\n"), second = text.indexOf("\n", first + 1);
+      if (first < 0 || second < 0) throw new Error("Invalid embedded WebM caption.");
+      return text.slice(second + 1);
+    }
+    if (codec !== "S_TEXT/ASS" && codec !== "S_TEXT/SSA") return text;
+    // Matroska maps eight ASS fields before the dialogue; commas in the text are literal.
+    let pos = 0;
+    for (let i = 0; i < 8; i++) {
+      const comma = text.indexOf(",", pos);
+      if (comma < 0) throw new Error("Invalid embedded ASS dialogue.");
+      pos = comma + 1;
+    }
+    return text.slice(pos).replace(/\{\\[^}]*\}/g, "").replace(/\\[Nn]/g, "\n").replace(/\\h/g, " ");
+  }
+  async function blockHeader(reader, el, track) {
+    const prefix = await reader.bytes(el.data, Math.min(11, el.end - el.data));
+    const number = vint(prefix, 0);
+    if (number.value !== track.id) return null;
+    const n = number.width;
+    if (prefix.length < n + 3) throw malformed();
+    const rawTime = prefix[n] * 256 + prefix[n + 1];
+    return { relative: rawTime < 32768 ? rawTime : rawTime - 65536,
+      lace: (prefix[n + 2] >> 1) & 3, data: el.data + n + 3, end: el.end };
+  }
+  async function scanCluster(reader, cluster, track, visit) {
+    let timestamp;
+    const pending = []; // Block offsets only, for muxers that put the timestamp after blocks.
+    const end = await visitCluster(reader, cluster, async el => {
+      if (el.id === ID.timestamp) {
+        timestamp = await reader.uint(el);
+        for (const b of pending) await visit(b, timestamp);
+        pending.length = 0;
+        return;
+      }
+      let block, duration;
+      if (el.id === ID.simple) block = await blockHeader(reader, el, track);
+      if (el.id === ID.group) {
+        for await (const child of reader.children(el)) {
+          if (child.id === ID.block) block = await blockHeader(reader, child, track);
+          if (child.id === ID.duration) duration = await reader.uint(child);
+        }
+      }
+      if (block) {
+        block.duration = duration;
+        if (timestamp === undefined) pending.push(block);
+        else await visit(block, timestamp);
+      }
+    });
+    if (pending.length) throw malformed();
+    return end;
+  }
+  async function getScale(reader, container) {
+    for (let pos = container.data; pos < container.end;) {
+      const el = await reader.header(pos, container.end);
+      if (el.id === ID.info) {
+        for await (const child of reader.children(el)) {
+          if (child.id !== ID.timeScale) continue;
+          const scale = (await reader.uint(child)) / 1e6;
+          if (!scale) throw malformed();
+          return scale;
+        }
+        return 1;
+      }
+      pos = el.unknown && el.id === ID.cluster ? await visitCluster(reader, el) : el.end;
+    }
+    return 1;
+  }
+  async function scan(reader, container, track, visit, onProgress) {
+    const msPerTick = await getScale(reader, container);
+    let lastProgress = 0;
+    onProgress?.(0);
+    for (let pos = container.data; pos < container.end;) {
+      const el = await reader.header(pos, container.end);
+      if (el.id === ID.cluster) {
+        pos = await scanCluster(reader, el, track, (b, clusterTime) => {
+          const start = (clusterTime + b.relative * track.trackScale) * msPerTick - track.codecDelay;
+          const duration = b.duration === undefined ? track.defaultDuration || null : b.duration * msPerTick * track.trackScale;
+          return visit(b, start, duration);
+        });
+      } else pos = el.end;
+      if (pos / container.end - lastProgress >= 0.005) {
+        lastProgress = pos / container.end; onProgress?.(lastProgress);
+      }
+    }
+    reader.check();
+    if (lastProgress < 1) onProgress?.(1);
+  }
+  async function readCues(file, id, { onProgress, signal } = {}) {
+    const reader = new Reader(file, signal);
+    const { container, choices } = await metadata(reader);
+    const track = choices.find(t => t.id === Number(id));
+    if (!track || track.kind !== "text") throw new Error("Choose a readable subtitle track.");
+    const blocks = [];
+    await scan(reader, container, track, async (b, start, duration) => {
+      if (b.lace) throw new Error("This embedded subtitle uses laced blocks. Use an external reference.");
+      const text = dialogue(await reader.string(b), track.codec);
+      blocks.push({ start, duration, text });
+    }, onProgress);
+    blocks.sort((a, b) => a.start - b.start);
+    const cues = [];
+    for (const [index, b] of blocks.entries()) {
+      if (!b.text.trim()) continue;
+      const start = Math.max(0, Math.round(b.start));
+      // Without a duration or subsequent timestamp the last block has no reliable end.
+      const endTime = b.duration !== null ? b.start + b.duration : blocks[index + 1]?.start;
+      if (endTime !== undefined && Math.round(endTime) > start) {
+        cues.push({ start, end: Math.round(endTime), text: b.text });
+      }
+    }
+    if (!cues.length) throw new Error("This track contains no readable subtitle cues with usable timing.");
+    return cues;
+  }
+  function packets(bytes, lace) {
+    if (!bytes.length) throw malformed();
+    if (!lace) return [bytes];
+    const count = bytes[0] + 1;
+    if (count < 2) throw malformed();
+    let pos = 1;
+    const sizes = [];
+    for (let i = 0; i < count - 1; i++) {
+      let size = 0;
+      if (lace === 1) { // Xiph: each 255 byte extends the frame length.
+        let part;
+        do { if (pos >= bytes.length) throw malformed(); part = bytes[pos++]; size += part; } while (part === 255);
+      } else if (lace === 2) size = (bytes.length - 1) / count;
+      else { // EBML: the first length is absolute, subsequent lengths use signed deltas.
+        const v = vint(bytes, pos);
+        size = v.value; pos += v.width;
+        if (i) size += sizes[i - 1] - (2 ** (7 * v.width - 1) - 1);
+      }
+      if (!Number.isSafeInteger(size) || size <= 0) throw malformed();
+      sizes.push(size);
+    }
+    sizes.push(bytes.length - pos - sizes.reduce((a, b) => a + b, 0));
+    if (sizes[sizes.length - 1] <= 0) throw malformed();
+    return sizes.map(length => {
+      const packet = bytes.subarray(pos, pos + length); pos += length; return packet;
+    });
+  }
+  function opusDuration(packet) {
+    const config = packet[0] >> 3;
+    const frameMs = config < 12 ? [10, 20, 40, 60][config % 4]
+      : config < 16 ? [10, 20][config % 2] : [2.5, 5, 10, 20][config % 4];
+    const mode = packet[0] & 3;
+    const count = mode === 0 ? 1 : mode < 3 ? 2 : (packet[1] & 63);
+    if (!count || count * frameMs > 120) throw malformed();
+    return frameMs * count;
+  }
+  async function readAudioPackets(file, idOrTrack, { onConfig, onPacket, onProgress, signal } = {}) {
+    const reader = new Reader(file, signal);
+    const { container, choices } = await metadata(reader);
+    const track = choices.find(t => t.id === Number(idOrTrack?.id ?? idOrTrack) && t.kind === "audio");
+    if (!track) throw new Error("Choose an AAC-LC or Opus audio track.");
+    await onConfig({ codec: track.webCodec, sampleRate: track.sampleRate,
+      numberOfChannels: track.channels, description: track.description.slice() });
+    let count = 0;
+    await scan(reader, container, track, async (b, start) => {
+      if (b.end - b.data > 8 * 1024 * 1024) throw new Error("An embedded audio block exceeds 8 MiB.");
+      const frames = packets(await reader.bytes(b.data, b.end - b.data), b.lace);
+      for (const data of frames) {
+        const duration = track.webCodec === "opus" ? opusDuration(data)
+          : track.defaultDuration || 1000 * track.aacSamples / track.sampleRate;
+        reader.check();
+        await onPacket({ type: "key", timestamp: Math.round(start * 1000),
+          duration: Math.round(duration * 1000), data });
+        start += duration;
+        count++;
+      }
+    }, onProgress);
+    if (!count) throw new Error("This audio track is empty.");
+  }
+  const api = { listTracks, readCues, readAudioPackets };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  else root.SyncMkv = api;
+})(globalThis);
+
+</script>
+  <script id="mp4-engine">
+/* Original browser rewrite. SPDX-License-Identifier: GPL-3.0-or-later */
+(function (root) {
+  'use strict';
+
+  const MAX_METADATA = 48 * 1024 * 1024;
+  const MAX_SAMPLES = 2000000;
+  const MAX_BATCH = 256 * 1024;
+  const cache = new WeakMap();
+  const invalid = (message) => new Error('MP4: ' + message);
+  const fourCC = (view, pos) => String.fromCharCode(...new Uint8Array(view.buffer, view.byteOffset + pos, 4));
+  const uint = (view, pos) => view.getUint32(pos);
+
+  function checkAbort(signal) {
+    if (signal && signal.aborted) throw new DOMException('Import cancelled.', 'AbortError');
+  }
+
+  function safe(value) {
+    const number = Number(value);
+    if (!Number.isSafeInteger(number)) throw invalid('a file offset or timestamp exceeds the supported range.');
+    return number;
+  }
+
+  function bounds(pos, length, end) {
+    if (pos < 0 || length < 0 || !Number.isSafeInteger(pos + length) || pos + length > end) {
+      throw invalid('a box or sample table is truncated.');
+    }
+  }
+
+  async function read(file, pos, size) {
+    bounds(pos, size, file.size);
+    const data = await file.slice(pos, pos + size).arrayBuffer();
+    if (data.byteLength !== size) throw invalid('could not read the complete file section.');
+    return new DataView(data);
+  }
+
+  function boxes(view, start, end) {
+    const result = [];
+    for (let pos = start; pos < end;) {
+      bounds(pos, 8, end);
+      const type = fourCC(view, pos + 4);
+      let header = 8;
+      let size = uint(view, pos);
+      if (size === 1) {
+        bounds(pos, 16, end);
+        size = safe(view.getBigUint64(pos + 8));
+        header = 16;
+      } else if (size === 0) size = end - pos;
+      if (size < header) throw invalid('invalid box size.');
+      bounds(pos, size, end);
+      if (result.length >= 32000) throw invalid('too many metadata boxes.');
+      result.push({type, start: pos + header, end: pos + size});
+      pos += size;
+    }
+    return result;
+  }
+
+  function child(nodes, type, required = true) {
+    const box = nodes.find(item => item.type === type);
+    if (!box && required) throw invalid('missing ' + type + ' metadata.');
+    return box;
+  }
+
+  function children(view, box) {
+    return boxes(view, box.start, box.end);
+  }
+
+  function field(view, box, at, size) {
+    const pos = box.start + at;
+    bounds(pos, size, box.end);
+    return pos;
+  }
+
+  function version(view, box) {
+    const v = view.getUint8(field(view, box, 0, 4));
+    if (v > 1) throw invalid('unsupported ' + box.type + ' version.');
+    return v;
+  }
+
+  function headerValue(view, box) {
+    return uint(view, field(view, box, version(view, box) ? 20 : 12, 4));
+  }
+
+  function table(view, box, rowSize) {
+    const count = uint(view, field(view, box, 4, 4));
+    if (count > MAX_SAMPLES) throw invalid('sample table exceeds the supported size.');
+    field(view, box, 8, count * rowSize);
+    return {pos: box.start + 8, count};
+  }
+
+  function editWindow(view, trackBoxes, movieScale, mediaScale) {
+    const edts = child(trackBoxes, 'edts', false);
+    if (!edts) return null;
+    const elst = child(children(view, edts), 'elst');
+    const long = version(view, elst) === 1;
+    const stride = long ? 20 : 12;
+    const {pos, count} = table(view, elst, stride);
+    if (!count) return null;
+    let cursor = 0;
+    let window = null;
+    for (let i = 0; i < count; i++) {
+      const p = pos + i * stride;
+      const duration = long ? safe(view.getBigUint64(p)) : uint(view, p);
+      const media = long ? safe(view.getBigInt64(p + 8)) : view.getInt32(p + 4);
+      if (view.getInt32(p + stride - 4) !== 65536 || media < -1) throw invalid('unsupported edit rate or media start.');
+      if (media >= 0) {
+        if (window) throw invalid('this track has multiple media edits. Export it as a timed SRT first.');
+        window = {start: media, length: duration / movieScale * mediaScale, movieStartMs: cursor / movieScale * 1000};
+      }
+      cursor = safe(cursor + duration);
+    }
+    if (!window) throw invalid('this track contains only empty edits.');
+    return window;
+  }
+
+  function trackInfo(view, trak) {
+    const top = children(view, trak);
+    const mdia = children(view, child(top, 'mdia'));
+    const handler = child(mdia, 'hdlr');
+    const type = fourCC(view, field(view, handler, 8, 4));
+    const audio = type === 'soun';
+    if (!audio && !['sbtl', 'subt', 'text'].includes(type)) return null;
+    const minf = children(view, child(mdia, 'minf'));
+    const stbl = children(view, child(minf, 'stbl'));
+    const stsd = child(stbl, 'stsd');
+    const count = uint(view, field(view, stsd, 4, 4));
+    const formats = boxes(view, stsd.start + 8, stsd.end);
+    if (formats.length !== count) throw invalid('invalid sample description count.');
+    const format = formats.find(f => audio ? ['mp4a', 'Opus'].includes(f.type) : f.type === 'tx3g');
+    if (!format) return null;
+    const codec = audio ? (format.type === 'Opus' ? 'opus' : 'aac') : 'tx3g';
+    const kind = audio ? 'audio' : 'text';
+
+    const mdhd = child(mdia, 'mdhd');
+    const mediaScale = headerValue(view, mdhd);
+    const langCode = view.getUint16(field(view, mdhd, version(view, mdhd) ? 32 : 20, 2));
+    const rawLanguage = String.fromCharCode(...[10,5,0].map(shift => 96 + ((langCode >> shift) & 31)));
+    const language = /^[a-z]{3}$/.test(rawLanguage) ? rawLanguage : 'und';
+    const id = headerValue(view, child(top, 'tkhd'));
+    if (!id || !mediaScale) throw invalid('track ID or timescale is zero.');
+    const name = audio ? (codec === 'aac' ? 'AAC audio' : 'Opus audio') : 'Timed text';
+    return {id, language, label: name + ' · ' + language + ' · track ' + id, codec, kind, mediaScale, top, minf, stbl, formats, format};
+  }
+
+  async function indexFile(file) {
+    let metadata;
+    const mediaRanges = [];
+    let count = 0;
+    for (let pos = 0; pos < file.size;) {
+      if (++count > 10000) throw invalid('too many top-level boxes.');
+      const h = await read(file, pos, 8);
+      let size = uint(h, 0), header = 8;
+      const type = fourCC(h, 4);
+      if (size === 1) {
+        size = safe((await read(file, pos + 8, 8)).getBigUint64(0));
+        header = 16;
+      } else if (size === 0) size = file.size - pos;
+      if (size < header) throw invalid('invalid top-level box size.');
+      bounds(pos, size, file.size);
+      if (type === 'moof') throw invalid('fragmented MP4 is unsupported. Export a subtitle track as SRT.');
+      if (type === 'moov') {
+        if (metadata || size > MAX_METADATA) throw invalid('duplicate or oversized movie metadata.');
+        metadata = await read(file, pos + header, size - header);
+      }
+      if (type === 'mdat') mediaRanges.push([pos + header, pos + size]);
+      pos += size;
+    }
+    if (!metadata) throw invalid('movie metadata was not found.');
+    const nodes = boxes(metadata, 0, metadata.byteLength);
+    if (child(nodes, 'mvex', false)) throw invalid('fragmented MP4 is unsupported. Export a subtitle track as SRT.');
+    if (child(nodes, 'cmov', false)) throw invalid('compressed QuickTime metadata is unsupported.');
+    const movieScale = headerValue(metadata, child(nodes, 'mvhd'));
+    if (!movieScale) throw invalid('movie timescale is zero.');
+    const tracks = nodes.filter(n => n.type === 'trak').map(n => trackInfo(metadata, n)).filter(Boolean);
+    if (new Set(tracks.map(t => t.id)).size !== tracks.length) throw invalid('duplicate subtitle track IDs.');
+    return {metadata, mediaRanges, movieScale, tracks};
+  }
+
+  function index(file) {
+    if (!cache.has(file)) cache.set(file, indexFile(file).catch(error => { cache.delete(file); throw error; }));
+    return cache.get(file);
+  }
+
+  async function listTracks(file) {
+    const {tracks} = await index(file);
+    return tracks.map(({id, label, language, codec, kind}) => ({id, label, language, codec, kind}));
+  }
+
+  function durations(view, box, count, composition) {
+    const v = version(view, box);
+    if (!composition && v) throw invalid('unsupported time-to-sample table version.');
+    const entries = table(view, box, 8);
+    const values = new Float64Array(count);
+    let index = 0;
+    for (let i = 0; i < entries.count; i++) {
+      const pos = entries.pos + 8 * i;
+      const length = uint(view, pos);
+      if (!length || length > count - index) throw invalid('inconsistent subtitle sample times.');
+      values.fill(composition && v ? view.getInt32(pos + 4) : uint(view, pos + 4), index, index + length);
+      index += length;
+    }
+    if (index !== count) throw invalid('incomplete subtitle sample times.');
+    return values;
+  }
+
+  function* planSamples(data, track) {
+    const {metadata: view, mediaRanges, movieScale} = data;
+    const {stbl, mediaScale} = track;
+    const stsz = child(stbl, 'stsz', false);
+    if (!stsz) throw invalid('missing standard media sample sizes.');
+    const fixed = uint(view, field(view, stsz, 4, 4));
+    const count = uint(view, field(view, stsz, 8, 4));
+    if (count > MAX_SAMPLES) throw invalid('too many media samples.');
+    if (!count) return;
+    if (!fixed) field(view, stsz, 12, count * 4);
+    const offsets = child(stbl, 'stco', false) || child(stbl, 'co64');
+    const wide = offsets.type === 'co64';
+    const chunks = table(view, offsets, wide ? 8 : 4);
+    const groups = table(view, child(stbl, 'stsc'), 12);
+    const times = durations(view, child(stbl, 'stts'), count, false);
+    const ctts = child(stbl, 'ctts', false);
+    const shifts = ctts && durations(view, ctts, count, true);
+    const edits = editWindow(view, track.top, movieScale, mediaScale);
+    const dinf = child(track.minf, 'dinf');
+    const dref = child(children(view, dinf), 'dref');
+    const refCount = uint(view, field(view, dref, 4, 4));
+    const refs = boxes(view, dref.start + 8, dref.end);
+    if (refs.length !== refCount) throw invalid('invalid data reference count.');
+    let n = 0;
+    let dts = 0;
+    for (let g = 0; g < groups.count; g++) {
+      const p = groups.pos + 12 * g;
+      const first = uint(view, p);
+      const end = g + 1 === groups.count ? chunks.count + 1 : uint(view, p + 12);
+      const perChunk = uint(view, p + 4);
+      const format = track.formats[uint(view, p + 8) - 1];
+      if (format !== track.format) throw invalid('tracks that switch sample descriptions are unsupported.');
+      const ref = refs[view.getUint16(field(view, format, 6, 2)) - 1];
+      if (!ref || ref.type !== 'url ' || !(uint(view, field(view, ref, 0, 4)) & 1)) {
+        throw invalid('external media data references are unsupported.');
+      }
+      if ((!g && first !== 1) || first >= end || end > chunks.count + 1 || !perChunk ||
+          (end - first) * perChunk > count - n) throw invalid('inconsistent sample-to-chunk table.');
+      for (let chunk = first - 1; chunk < end - 1; chunk++) {
+        const pos = chunks.pos + chunk * (wide ? 8 : 4);
+        let offset = wide ? safe(view.getBigUint64(pos)) : uint(view, pos);
+        const region = mediaRanges.find(([start, end]) => offset >= start && offset < end);
+        if (!region) throw invalid('subtitle chunk points outside media data.');
+        for (let k = 0; k < perChunk; k++) {
+          const size = fixed || uint(view, stsz.start + 12 + 4 * n);
+          if (size > MAX_BATCH) throw invalid('oversized media sample.');
+          bounds(offset, size, region[1]);
+          const duration = times[n], pts = safe(dts + (shifts ? shifts[n] : 0));
+          const relative = pts - (edits ? edits.start : 0);
+          const relativeEnd = relative + duration;
+          const end = edits ? Math.min(edits.length, relativeEnd) : relativeEnd;
+          const origin = edits ? edits.movieStartMs : 0;
+          const sample = {offset, size, progress: ++n / count};
+          if (track.kind === 'audio') {
+            sample.timestamp = Math.round((origin + relative * 1000 / mediaScale) * 1000);
+            sample.duration = Math.round(duration * 1000000 / mediaScale);
+            // Include preroll, including negative movie times, to initialize the decoder.
+            sample.enabled = !edits || relative < edits.length;
+          } else {
+            sample.start = Math.round(origin + Math.max(0, relative) * 1000 / mediaScale);
+            sample.end = Math.round(origin + end * 1000 / mediaScale);
+          }
+          yield sample;
+          offset += size;
+          dts = safe(dts + duration);
+        }
+      }
+    }
+    if (n !== count) throw invalid('incomplete sample-to-chunk table.');
+  }
+
+  function sampleText(view, pos, size) {
+    if (size === 0) return '';
+    bounds(pos, 2, pos + size);
+    const length = view.getUint16(pos);
+    bounds(pos + 2, length, pos + size);
+    if (!length) return '';
+    const bom = length >= 2 && view.getUint16(pos + 2);
+    const codec = bom === 0xfeff ? 'utf-16be' : bom === 0xfffe ? 'utf-16le' : 'utf-8';
+    return new TextDecoder(codec, {fatal: true}).decode(new Uint8Array(view.buffer, view.byteOffset + pos + 2, length))
+      .replace(/\r\n?/g, '\n');
+  }
+
+  async function* sampleBatches(file, data, track, signal) {
+    const iterator = planSamples(data, track);
+    let next = iterator.next();
+    while (!next.done) {
+      checkAbort(signal);
+      const list = [next.value];
+      const from = next.value.offset;
+      let size = next.value.size;
+      while (!(next = iterator.next()).done && next.value.offset === from + size &&
+             size + next.value.size <= MAX_BATCH && list.length < 2048) {
+        list.push(next.value);
+        size += next.value.size;
+      }
+      const view = await read(file, from, size);
+      checkAbort(signal);
+      yield {list, view, from};
+    }
+  }
+
+  function selectTrack(data, selected, kind) {
+    const id = selected && typeof selected === 'object' ? selected.id : selected;
+    const track = data.tracks.find(item => item.kind === kind && String(item.id) === String(id));
+    if (!track) throw invalid('the selected ' + kind + ' track was not found.');
+    return track;
+  }
+
+  async function readCues(file, id, {onProgress, signal} = {}) {
+    checkAbort(signal);
+    const data = await index(file);
+    const track = selectTrack(data, id, 'text');
+    const output = [];
+    for await (const {list, view, from} of sampleBatches(file, data, track, signal)) {
+      for (const {offset, size, start, end} of list) {
+        if (end <= start) continue;
+        const text = sampleText(view, offset - from, size);
+        if (text.trim()) output.push({start, end, text});
+      }
+      if (onProgress) onProgress(list[list.length - 1].progress);
+    }
+    checkAbort(signal);
+    return output.sort((a, b) => a.start - b.start || a.end - b.end);
+  }
+
+  function descriptor(view, pos, end, expected) {
+    bounds(pos, 1, end);
+    if (view.getUint8(pos++) !== expected) throw invalid('unsupported AAC descriptor.');
+    let length = 0;
+    for (let i = 0; i < 4; i++) {
+      bounds(pos, 1, end);
+      const value = view.getUint8(pos++);
+      length = length * 128 + (value & 127);
+      if (!(value & 128)) {
+        bounds(pos, length, end);
+        return {start: pos, end: pos + length};
+      }
+    }
+    throw invalid('invalid AAC descriptor size.');
+  }
+
+  function aacConfig(view, nodes) {
+    const wave = child(nodes, 'wave', false);
+    const esds = child(nodes, 'esds', false) || (wave && child(children(view, wave), 'esds', false));
+    if (!esds) throw invalid('AAC codec configuration was not found.');
+    const es = descriptor(view, field(view, esds, 4, 2), esds.end, 3);
+    const flags = view.getUint8(field(view, es, 2, 1));
+    let pos = es.start + 3 + (flags & 128 ? 2 : 0);
+    if (flags & 64) {
+      bounds(pos, 1, es.end);
+      pos += 1 + view.getUint8(pos);
+    }
+    if (flags & 32) pos += 2;
+    const decoder = descriptor(view, pos, es.end, 4);
+    if (view.getUint8(field(view, decoder, 0, 13)) !== 0x40) throw invalid('only MPEG-4 AAC-LC audio is supported.');
+    const config = descriptor(view, decoder.start + 13, decoder.end, 5);
+    const bits = view.getUint16(field(view, config, 0, 2));
+    const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+    const sampleRate = rates[(bits >> 7) & 15];
+    const numberOfChannels = [0, 1, 2, 3, 4, 5, 6, 8][(bits >> 3) & 15];
+    if ((bits >> 11) !== 2 || !sampleRate || !numberOfChannels) {
+      throw invalid('unsupported AAC profile, sample rate or channel layout. Choose AAC-LC or export PCM WAV.');
+    }
+    return {codec: 'mp4a.40.2', sampleRate, numberOfChannels,
+      description: new Uint8Array(view.buffer.slice(view.byteOffset + config.start, view.byteOffset + config.end))};
+  }
+
+  function opusConfig(view, nodes) {
+    const dops = child(nodes, 'dOps');
+    const p = field(view, dops, 0, 11);
+    const channels = view.getUint8(p + 1), mapping = view.getUint8(p + 10);
+    if (view.getUint8(p) !== 0 || !channels || (mapping !== 0 && mapping !== 1) ||
+        (!mapping && channels > 2)) throw invalid('unsupported Opus configuration.');
+    const extra = mapping ? 2 + channels : 0;
+    field(view, dops, 11, extra);
+    const head = new Uint8Array(19 + extra);
+    head.set(new TextEncoder().encode('OpusHead'));
+    head[8] = 1;
+    head[9] = channels;
+    const h = new DataView(head.buffer);
+    h.setUint16(10, view.getUint16(p + 2), true);
+    h.setUint32(12, uint(view, p + 4), true);
+    h.setInt16(16, view.getInt16(p + 8), true);
+    head[18] = mapping;
+    if (extra) head.set(new Uint8Array(view.buffer, view.byteOffset + p + 11, extra), 19);
+    return {codec: 'opus', sampleRate: 48000, numberOfChannels: channels, description: head};
+  }
+
+  function audioConfig(data, track) {
+    const view = data.metadata, entry = track.format;
+    const v = view.getUint16(field(view, entry, 8, 2));
+    if (v > 1) throw invalid('unsupported QuickTime audio sample description.');
+    const offset = v ? 44 : 28;
+    const nodes = boxes(view, field(view, entry, offset, 0), entry.end);
+    return track.codec === 'aac' ? aacConfig(view, nodes) : opusConfig(view, nodes);
+  }
+
+  async function readAudioPackets(file, id, {onConfig, onPacket, onProgress, signal} = {}) {
+    checkAbort(signal);
+    const data = await index(file);
+    const track = selectTrack(data, id, 'audio');
+    checkAbort(signal);
+    const edits = editWindow(data.metadata, track.top, data.movieScale, track.mediaScale);
+    const window = edits ? {startUs: Math.round(edits.movieStartMs * 1000),
+      endUs: Math.round((edits.movieStartMs + edits.length * 1000 / track.mediaScale) * 1000)} : undefined;
+    await onConfig(audioConfig(data, track), window);
+    for await (const {list, view, from} of sampleBatches(file, data, track, signal)) {
+      for (const {offset, size, timestamp, duration, enabled} of list) {
+        checkAbort(signal);
+        if (enabled && size) await onPacket({timestamp, duration, type: 'key',
+          data: new Uint8Array(view.buffer, view.byteOffset + offset - from, size)});
+      }
+      if (onProgress) onProgress(list[list.length - 1].progress);
+    }
+    checkAbort(signal);
+  }
+
+  const api = {listTracks, readCues, readAudioPackets};
+  root.SyncMp4 = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(globalThis);
+
+</script>
+  <script id="movie-audio-engine">
+/* Original browser rewrite. SPDX-License-Identifier: GPL-3.0-or-later */
+(function (root) {
+  'use strict';
+
+  const audio = root.SyncAudio || (typeof require === 'function' && require('./audio.js'));
+  const STEP_US = 100000;
+  const MAX_BINS = 48 * 3600 * 10;
+  const FALLBACK = 'Select a timed subtitle track or export a mono, 16 kHz PCM WAV from this soundtrack.';
+
+  function available() {
+    return typeof root.AudioDecoder === 'function' && typeof root.AudioDecoder.isConfigSupported === 'function' &&
+      typeof root.EncodedAudioChunk === 'function';
+  }
+
+  function createTimeline() {
+    let levels = new Uint8Array(2048);
+    let quality = new Uint8Array(2048);
+    let meter, rate, length = 0, currentBin = -1, binFrames = 0;
+    let nextUs = 0, audibleStart = 0, audibleEnd = Infinity;
+    const planes = [];
+
+    function writeBin() {
+      if (binFrames) meter.writeBin(levels, quality, currentBin, binFrames);
+      binFrames = 0;
+    }
+
+    function reserve(bin) {
+      if (bin < 0 || bin >= MAX_BINS) throw new Error('Audio timestamps exceed the supported 48-hour movie timeline.');
+      if (bin < levels.length) return;
+      const capacity = Math.min(MAX_BINS, Math.max(bin + 1, levels.length * 2));
+      const nextLevels = new Uint8Array(capacity);
+      const nextQuality = new Uint8Array(capacity);
+      nextLevels.set(levels);
+      nextQuality.set(quality);
+      levels = nextLevels;
+      quality = nextQuality;
+    }
+
+    function setWindow(window) {
+      if (!window) return;
+      if (!Number.isFinite(window.startUs) || !Number.isFinite(window.endUs) || window.startUs > window.endUs) {
+        throw new Error('The movie track contains an invalid edit window.');
+      }
+      audibleStart = Math.max(0, window.startUs);
+      audibleEnd = window.endUs;
+    }
+
+    function add(data) {
+      const newRate = data.sampleRate;
+      const frames = data.numberOfFrames;
+      const channels = data.numberOfChannels;
+      if (!Number.isFinite(data.timestamp) || !Number.isFinite(newRate) || newRate < 1000 || newRate > 768000 ||
+          !Number.isInteger(frames) || frames < 0 || frames > newRate * 10 || !Number.isInteger(channels) || channels < 1) {
+        throw new Error('The movie decoder returned an invalid audio frame.');
+      }
+      if (!frames) return;
+      if (rate && newRate !== rate) throw new Error('The audio sample rate changes within this track. ' + FALLBACK);
+      if (!meter) {
+        rate = newRate;
+        meter = audio.createBandMeter(rate);
+      }
+
+      // Account for rounded container timestamps. Larger jumps are real gaps or edit preroll.
+      let startUs = data.timestamp;
+      if (length && Math.abs(startUs - nextUs) <= 1100) startUs = nextUs;
+      let pos = Math.max(0, Math.ceil((Math.max(audibleStart, nextUs) - startUs) * rate / 1e6 - 1e-6));
+      const limit = Math.min(frames, Math.ceil((audibleEnd - startUs) * rate / 1e6 - 1e-6));
+      if (pos >= limit) return;
+      if (startUs > nextUs + 1100) meter.resetFilter();
+      const used = channels === 1 ? 1 : channels === 3 || channels >= 5 ? 3 : 2;
+      for (let ch = 0; ch < used; ch++) {
+        if (!planes[ch] || planes[ch].length < frames) planes[ch] = new Float32Array(frames);
+        data.copyTo(planes[ch], {planeIndex: ch, format: 'f32-planar'});
+      }
+
+      while (pos < limit) {
+        const bin = Math.floor((startUs + pos * 1e6 / rate + 0.00001) / STEP_US);
+        if (currentBin !== bin) {
+          writeBin();
+          reserve(bin);
+          currentBin = bin;
+        }
+        const boundary = Math.ceil(((bin + 1) * STEP_US - startUs) * rate / 1e6 - 1e-6);
+        const stop = Math.min(limit, Math.max(pos + 1, boundary));
+        binFrames += stop - pos;
+        for (; pos < stop; pos++) {
+          let x;
+          if (used === 1) x = planes[0][pos];
+          else if (used === 2) x = 0.60 * planes[0][pos] + 0.40 * planes[1][pos];
+          else x = 0.22 * planes[0][pos] + 0.18 * planes[1][pos] + 0.60 * planes[2][pos];
+          meter.sample(Number.isFinite(x) ? x : 0);
+        }
+        length = Math.max(length, bin + 1);
+      }
+      nextUs = startUs + frames * 1e6 / rate;
+    }
+
+    function finish() {
+      if (!length) throw new Error('The selected movie track produced no audio. ' + FALLBACK);
+      writeBin();
+      const activity = audio.activityFromLevels(levels.subarray(0, length), quality.subarray(0, length));
+      return {activity, stepMs: STEP_US / 1000};
+    }
+
+    return {setWindow, add, finish};
+  }
+
+  async function readMovieActivity(file, track, demuxer, {onProgress, signal} = {}) {
+    if (!available()) throw new Error('This browser does not provide local movie audio decoding. ' + FALLBACK);
+    const timeline = createTimeline();
+    let decoder, failure, wake, configured = false;
+    const notify = () => { if (wake) wake(); };
+    const check = () => {
+      if (signal && signal.aborted) throw new DOMException('Analysis cancelled.', 'AbortError');
+      if (failure) throw failure;
+    };
+    const close = () => {
+      if (decoder && decoder.state !== 'closed') decoder.close();
+      notify();
+    };
+    const fail = err => {
+      failure = err;
+      close();
+    };
+    if (signal) signal.addEventListener('abort', close, {once: true});
+    try {
+      check();
+      const onConfig = async (config, window) => {
+        timeline.setWindow(window);
+        if (configured) throw new Error('The audio encoding changes within this movie track. ' + FALLBACK);
+        const supported = await root.AudioDecoder.isConfigSupported(config).catch(() => ({supported: false}));
+        check();
+        if (!supported.supported) throw new Error('This browser cannot decode ' + config.codec + '. ' + FALLBACK);
+        decoder = new root.AudioDecoder({
+          output(data) {
+            try { if (!failure && !signal?.aborted) timeline.add(data); }
+            catch (err) { fail(err); }
+            finally { data.close(); }
+          },
+          error(err) { fail(new Error('The movie soundtrack could not be decoded: ' + err.message + '. ' + FALLBACK)); }
+        });
+        decoder.addEventListener('dequeue', notify);
+        decoder.configure(config);
+        configured = true;
+      };
+      const onPacket = async packet => {
+        check();
+        if (!configured) throw new Error('The movie audio track is missing its codec configuration.');
+        // Keep codec state continuous, including Opus/AAC priming, while bounding the input queue.
+        while (decoder.decodeQueueSize >= 24) {
+          await new Promise(resolve => { wake = resolve; });
+          wake = undefined;
+          check();
+        }
+        decoder.decode(new root.EncodedAudioChunk({type: 'key', ...packet}));
+      };
+      if (onProgress) onProgress(0);
+      await demuxer.readAudioPackets(file, track, {
+        signal, onConfig, onPacket, onProgress: onProgress && (value => onProgress(0.98 * value))
+      });
+      check();
+      if (!configured) throw new Error('The selected movie track contains no decodable audio. ' + FALLBACK);
+      try { await decoder.flush(); }
+      catch (err) { check(); throw err; }
+      check();
+      const result = timeline.finish();
+      if (onProgress) onProgress(1);
+      return result;
+    } finally {
+      if (signal) signal.removeEventListener('abort', close);
+      if (decoder) decoder.removeEventListener('dequeue', notify);
+      close();
+    }
+  }
+
+  const api = {available, readMovieActivity};
+  root.SyncMovieAudio = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(globalThis);
+
+</script>
+  <script>
+/* Original browser studio. SPDX-License-Identifier: GPL-3.0-or-later */
+(() => {
+  'use strict';
+
+  async function estimate(job, onProgress, signal) {
+    const options = {onProgress, signal};
+    let reference;
+    switch (job.kind) {
+      case 'wav':
+        reference = await SyncAudio.readWavActivity(job.file, options);
+        break;
+      case 'mkv':
+      case 'mp4': {
+        const demuxer = job.kind === 'mkv' ? SyncMkv : SyncMp4;
+        reference = job.track.kind === 'audio'
+          ? await SyncMovieAudio.readMovieActivity(job.file, job.track, demuxer, options)
+          : await demuxer.readCues(job.file, job.track.id, options);
+        break;
+      }
+      default:
+        reference = job.reference;
+    }
+    if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError');
+    onProgress(1);
+    return SyncAlign.align(job.cues, reference);
+  }
+
+  function workerStart(calculate) {
+    self.onmessage = async ({data}) => {
+      self.postMessage({type:'ready'});
+      try {
+        const value = await calculate(data, fraction => self.postMessage({type:'progress',fraction}));
+        self.postMessage({type:'result',value});
+      } catch (error) {
+        self.postMessage({type:'failure',message:error.message || String(error)});
+      }
+    };
+  }
+  if (typeof document === 'undefined') {
+    workerStart(estimate);
+    return;
+  }
+
+  const byId = id => document.getElementById(id);
+  const engines = ['align-engine', 'audio-engine', 'mkv-engine', 'mp4-engine', 'movie-audio-engine'];
+  const tracks = {source:null, ref:null};
+  const readId = {source:0, ref:0};
+  const readAbort = {source:null, ref:null};
+  let mode = 'automatic';
+  let position = 'first';
+  let running = null;
+  let result = null;
+  let demoSession = false;
+  let mediaUrl = null;
+  let mediaName = '';
+  let reviewMedia = null;
+  let attachedSeparately = false;
+  let mediaReady = false;
+  let focusedPair = null;
+  let playbackCues = [], previousPlaybackSource, previousPlaybackMap;
+  const identityTime = time => time;
+
+  const encodings = [
+    ['auto','Auto (Unicode)'], ['utf-8','UTF-8'], ['utf-16le','UTF-16 little-endian'], ['utf-16be','UTF-16 big-endian'],
+    ['windows-1250','Central European · Windows-1250'], ['windows-1252','Western European · Windows-1252'],
+    ['windows-1251','Cyrillic · Windows-1251'], ['koi8-r','Cyrillic · KOI8-R'], ['koi8-u','Ukrainian · KOI8-U'],
+    ['windows-1253','Greek · Windows-1253'], ['windows-1254','Turkish · Windows-1254'], ['windows-1257','Baltic · Windows-1257'],
+    ['windows-1255','Hebrew · Windows-1255'], ['windows-1256','Arabic · Windows-1256'], ['windows-1258','Vietnamese · Windows-1258'],
+    ['windows-874','Thai · Windows-874'], ['shift_jis','Japanese · Shift_JIS'], ['euc-jp','Japanese · EUC-JP'],
+    ['iso-2022-jp','Japanese · ISO-2022-JP'], ['gb18030','Chinese · GB18030'], ['big5','Chinese · Big5'],
+    ['euc-kr','Korean · EUC-KR'], ['ibm866','Cyrillic · IBM866'], ['macintosh','Western European · Macintosh'],
+    ['iso-8859-2','Central European · ISO-8859-2'], ['iso-8859-3','South European · ISO-8859-3'],
+    ['iso-8859-4','Baltic · ISO-8859-4'], ['iso-8859-5','Cyrillic · ISO-8859-5'], ['iso-8859-6','Arabic · ISO-8859-6'],
+    ['iso-8859-7','Greek · ISO-8859-7'], ['iso-8859-8','Hebrew · ISO-8859-8'], ['iso-8859-10','Nordic · ISO-8859-10'],
+    ['iso-8859-13','Baltic · ISO-8859-13'], ['iso-8859-14','Celtic · ISO-8859-14'], ['iso-8859-15','Western European · ISO-8859-15']
+  ];
+  for (const slot of ['source','ref']) {
+    for (const [value,label] of encodings) byId(slot+'-encoding').add(new Option(label,value));
+  }
+
+  function makeExample() {
+    const ar = ['وصل القطار قبل الفجر.', 'هل أحضرت الخريطة؟', 'أظن أن الطريق من هنا.', 'لننتظر حتى تضيء النافذة.', 'تركت لك رسالة على الطاولة.', 'أسمع خطوات في الممر.'];
+    const fr = ['Le train est arrivé avant le jour.', 'Tu as apporté la carte ?', 'Je crois que c’est par ici.', 'Attendons que la fenêtre s’éclaire.', 'Je t’ai laissé un mot sur la table.', 'J’entends des pas dans le couloir.'];
+    let random = 91573, time = 1800;
+    const draw = () => {random = (Math.imul(random,1664525) + 1013904223) >>> 0; return random / 4294967296;};
+    const source = [], ref = [];
+    for (let index=0; index<56; index++) {
+      const end = time + Math.round(900 + draw()*3000);
+      const makeCue = (shift, line) => [index+1, SyncSrt.formatTime(time+shift)+' --> '+SyncSrt.formatTime(end+shift),line].join('\n');
+      source.push(makeCue(0, ar[index%ar.length]));
+      ref.push(makeCue(2400, fr[index%fr.length]));
+      time = end + Math.round(300 + draw()*draw()*11000);
+    }
+    return {source:SyncSrt.parse(source.join('\n\n')+'\n'), ref:SyncSrt.parse(ref.join('\n\n')+'\n')};
+  }
+  const example = makeExample();
+
+  function message(text, kind='') {
+    byId('status').textContent = text;
+    byId('status').dataset.kind = kind;
+  }
+  function stop() {
+    if (running) running.abort();
+    running = null;
+  }
+  function invalidate() {
+    stop();
+    result = null;
+    controls();
+    preview();
+  }
+  function selectPosition(next) {
+    position = next;
+    for (const button of document.querySelectorAll('[data-position]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.position===next));
+    }
+    preview();
+  }
+  function controls() {
+    const ref = tracks.ref;
+    const hasRef = ref?.parsed || ref?.kind==='wav' || ref?.selected;
+    byId('run').disabled = !!running || !tracks.source?.parsed || (mode==='automatic' && !hasRef);
+    byId('run').textContent = running ? 'Analyzing…' : mode==='automatic' ? 'Find timing' : 'Preview adjustment';
+    byId('cancel').hidden = !running;
+    byId('export').disabled = !result?.exportable;
+  }
+  function guide() {
+    const source = tracks.source;
+    const ref = tracks.ref;
+    if (source?.error || (mode==='automatic' && ref?.error)) {
+      message(source?.error || ref.error,'error');
+    } else if (!source?.parsed) {
+      message(mode==='automatic' ? 'Choose your subtitle and timing reference to begin.' : 'Choose the subtitle you want to adjust.');
+    } else if (mode==='manual') {
+      message('Set matching times, then preview the adjustment.');
+    } else if (!ref) {
+      message('Choose a reference timed to the release you want.');
+    } else if (ref.tracks?.length > 1 && !ref.selected) {
+      message('Choose the reference track you want to use.');
+    } else if (!byId('run').disabled) {
+      message('Ready to compare timing patterns.');
+    }
+  }
+  function setMode(next) {
+    mode = next;
+    byId('automatic').setAttribute('aria-pressed', String(next==='automatic'));
+    byId('manual').setAttribute('aria-pressed', String(next==='manual'));
+    byId('auto-fields').hidden = next==='manual';
+    byId('anchor-fields').hidden = next==='automatic';
+    byId('capture').hidden = next!=='manual' || !mediaReady;
+    invalidate();
+    guide();
+  }
+
+  function kindOf(file, slot) {
+    if (slot==='source') return 'srt';
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['mkv','mks','webm'].includes(ext)) return 'mkv';
+    if (['mp4','m4v','mov'].includes(ext)) return 'mp4';
+    return ['wav','wave'].includes(ext) ? 'wav' : 'srt';
+  }
+  function trackChoices(record) {
+    const select = byId('movie-track');
+    select.replaceChildren();
+    const choices = [...record.tracks].sort((a,b)=>Number(a.kind==='audio')-Number(b.kind==='audio'));
+    const available = choices.filter(track => track.kind!=='audio' || SyncMovieAudio.available());
+    const selected = available.length===1 ? available[0] : null;
+    if (!selected) select.add(new Option('Choose a track…',''));
+    for (const track of choices) {
+      const disabled = !available.includes(track);
+      const entry = new Option(track.label + (disabled ? ' · browser audio unavailable' : ''), String(track.id));
+      entry.disabled = disabled;
+      select.add(entry);
+    }
+    record.selected = selected;
+    select.value = selected ? String(selected.id) : '';
+    byId('track-box').hidden = false;
+    if (!available.length) throw Error('This movie has no usable reference track in this browser. Choose a timed SRT or extract a PCM WAV.');
+  }
+  async function choose(slot, file) {
+    if (!file) return;
+    // Switching from the example to real footage always starts a fresh session.
+    if (demoSession) resetFiles();
+    const ticket = ++readId[slot];
+    readAbort[slot]?.abort();
+    const controller = new AbortController();
+    readAbort[slot] = controller;
+    const kind = kindOf(file,slot);
+    const record = {file,kind,name:file.name};
+    tracks[slot] = record;
+    if (slot==='source') selectPosition('first');
+    invalidate();
+    const meta = byId(slot+'-meta');
+    byId(slot+'-name').textContent = file.name;
+    meta.textContent = 'Reading file…';
+    byId(slot+'-encoding-box').hidden = kind!=='srt';
+    if (slot==='ref') {
+      byId('track-box').hidden = true;
+      if (!attachedSeparately) setMedia(kind==='srt'?null:file);
+    }
+    try {
+      if (kind==='srt') {
+        if (file.size > 32*1024*1024) throw Error('Choose an SRT under 32 MiB, or use an MKV, MP4, or WAV as your timing reference.');
+        const bytes = await file.arrayBuffer();
+        if (readId[slot]!==ticket) return;
+        record.parsed = SyncSrt.parse(SyncSrt.decode(bytes,byId(slot+'-encoding').value));
+        meta.textContent = record.parsed.cues.length.toLocaleString()+' cues · SRT';
+      } else if (kind==='wav') {
+        meta.textContent = 'Audio activity · WAV';
+      } else {
+        const demuxer = kind==='mkv' ? SyncMkv : SyncMp4;
+        record.tracks = await demuxer.listTracks(file,{signal:controller.signal});
+        if (readId[slot]!==ticket) return;
+        if (!record.tracks.length) throw Error('No usable tracks found. Choose a timed SRT or PCM WAV.');
+        trackChoices(record);
+        meta.textContent = record.tracks.length+' '+(record.tracks.length===1?'track':'tracks')+' · movie';
+      }
+    } catch (error) {
+      if (readId[slot]!==ticket) return;
+      record.error = error.message || String(error);
+      meta.textContent = 'Could not read this file';
+      if (kind==='srt' && /encod|UTF|decod/i.test(record.error)) byId(slot+'-encoding-box').open=true;
+    }
+    if (readId[slot]===ticket) {
+      controls();
+      guide();
+      preview();
+    }
+  }
+  function resetFiles() {
+    demoSession = false;
+    setMedia(null);
+    focusedPair = null;
+    for (const slot of ['source','ref']) {
+      readAbort[slot]?.abort();
+      ++readId[slot];
+      tracks[slot] = null;
+      byId(slot+'-file').value = '';
+      byId(slot+'-encoding').value = 'auto';
+      byId(slot+'-encoding-box').open = false;
+      byId(slot+'-encoding-box').hidden = false;
+    }
+    byId('source-name').textContent='Choose subtitle';
+    byId('source-meta').textContent='Drop an SRT file here';
+    byId('ref-name').textContent='Choose reference';
+    byId('ref-meta').textContent='Drop a timed SRT, movie or WAV';
+    byId('track-box').hidden=true;
+    byId('anchor-rows').replaceChildren();
+    addAnchor();
+  }
+  function loadDemo() {
+    stop();
+    resetFiles();
+    demoSession = true;
+    for (const slot of ['source','ref']) {
+      const name = slot==='source'?'platform.ar.srt':'platform.reference.fr.srt';
+      tracks[slot]={kind:'srt',name,parsed:example[slot]};
+      byId(slot+'-name').textContent=name;
+      byId(slot+'-meta').textContent=example[slot].cues.length+' cues · example SRT';
+      byId(slot+'-encoding-box').hidden=true;
+    }
+    const row = byId('anchor-rows').firstElementChild;
+    row.children[0].value = SyncSrt.formatTime(example.source.cues[0].start);
+    row.children[1].value = SyncSrt.formatTime(example.ref.cues[0].start);
+    setMode('automatic');
+    selectPosition('first');
+    message('Example loaded. Find timing to align Arabic subtitles with their French reference.');
+  }
+  function addAnchor() {
+    const row = document.createElement('div');
+    row.className='anchor-row';
+    for (const label of ['Subtitle time','Film time']) {
+      const input=document.createElement('input');
+      input.type='text'; input.setAttribute('aria-label',label);
+      input.placeholder='00:00:00,000'; input.autocomplete='off'; input.spellcheck=false;
+      input.addEventListener('input',()=>{invalidate(); guide();});
+      input.addEventListener('focus',()=>{focusedPair=row;});
+      row.append(input);
+    }
+    const remove=document.createElement('button');
+    remove.className='remove-anchor'; remove.type='button';
+    remove.textContent='×'; remove.setAttribute('aria-label','Remove timing pair');
+    remove.addEventListener('click',()=>{
+      if (row.parentNode.children.length>1) row.remove();
+      else for (const input of row.querySelectorAll('input')) input.value='';
+      invalidate(); guide();
+    });
+    row.append(remove);
+    byId('anchor-rows').append(row);
+    focusedPair=row;
+    return row;
+  }
+
+  function runWorker(job, onProgress, signal) {
+    if (typeof Worker!=='function') return estimate(job,onProgress,signal);
+    return new Promise((resolve,reject)=>{
+      let worker, blobUrl, started=false;
+      const cleanup = () => {
+        signal.removeEventListener('abort',abort);
+        worker?.terminate();
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+      };
+      const abort = () => {cleanup(); reject(new DOMException('Analysis cancelled','AbortError'));};
+      const fallback = () => {
+        cleanup();
+        if (signal.aborted) return reject(new DOMException('Analysis cancelled','AbortError'));
+        estimate(job,onProgress,signal).then(resolve,reject);
+      };
+      try {
+        const sources=engines.map(id=>byId(id).textContent);
+        if (sources.every(source=>source.trim())) {
+          blobUrl=URL.createObjectURL(new Blob([...sources.map(source=>source+'\n;\n'),
+            '('+workerStart.toString()+')('+estimate.toString()+');'],{type:'text/javascript'}));
+        }
+        worker=new Worker(blobUrl || 'worker.js');
+        worker.onerror=event=>{
+          event.preventDefault();
+          if (!started) return fallback();
+          cleanup(); reject(Error(event.message || 'Timing analysis failed. Try another reference.'));
+        };
+        worker.onmessage=({data})=>{
+          if (data.type==='ready') {started=true; return;}
+          if (data.type==='progress') {onProgress(data.fraction); return;}
+          cleanup();
+          if (data.type==='result') resolve(data.value);
+          else reject(Error(data.message || 'Could not analyze this reference.'));
+        };
+        signal.addEventListener('abort',abort,{once:true});
+        worker.postMessage(job);
+      } catch {fallback();}
+    });
+  }
+  function timingOnly(cues) {
+    return cues.map(({start,end})=>({start,end}));
+  }
+  function signedSeconds(ms) {
+    return (ms>=0?'+':'−')+(Math.abs(ms)/1000).toFixed(3)+' s';
+  }
+  async function analyze() {
+    if (byId('run').disabled) return;
+    invalidate();
+    const controller=new AbortController();
+    running=controller;
+    controls();
+    const parsed=tracks.source.parsed;
+    try {
+      let map, title, detail, exportable=true;
+      if (mode==='manual') {
+        const pairs=Array.from(byId('anchor-rows').children,(row,index)=>{
+          const times=Array.from(row.querySelectorAll('input'),input=>input.value.trim());
+          if (times.some(value=>!value)) throw Error('Fill in both times for pair '+(index+1)+'.');
+          return {source:SyncSrt.parseTime(times[0]),target:SyncSrt.parseTime(times[1])};
+        });
+        map=SyncSrt.anchors(pairs);
+        title=pairs.length===1?'Offset '+signedSeconds(pairs[0].target-pairs[0].source):pairs.length+' timing pairs';
+        detail='Review the adjusted cues before export.';
+      } else {
+        const ref=tracks.ref;
+        const job={cues:timingOnly(parsed.cues),kind:ref.kind};
+        if (ref.parsed) job.reference=timingOnly(ref.parsed.cues);
+        else {job.file=ref.file; job.track=ref.selected;}
+        message(ref.parsed?'Comparing timing patterns…':'Reading the selected track…');
+        const answer=await runWorker(job, fraction=>{
+          if (running!==controller) return;
+          const progress=Math.round(100*Number(fraction));
+          if (Number.isFinite(progress)) message(progress>=100?'Comparing timing patterns…':'Reading reference · '+progress+'%');
+        },controller.signal);
+        if (running!==controller) return;
+        if (!Number.isFinite(answer.scale) || answer.scale<=0 || !Number.isFinite(answer.offsetMs)) throw Error(answer.reason || 'No timing estimate. Use manual anchors or choose another reference.');
+        map=time=>time*answer.scale+answer.offsetMs;
+        exportable=!!answer.reliable;
+        const drift=((answer.scale-1)*100);
+        const sign=drift>=0?'+':'−';
+        title='Offset '+signedSeconds(answer.offsetMs);
+        detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · match score '+Math.round(answer.score*100)+'%';
+        if (!exportable) message((answer.reason || 'Weak timing match.')+' Try manual anchors or a different reference.','error');
+      }
+      let text;
+      if (exportable) text=SyncSrt.render(parsed,map);
+      result={map,title,detail,exportable,text};
+      if (exportable) message('Timing ready. Check the start, middle, and end before exporting.','ok');
+    } catch (error) {
+      if (running!==controller) return;
+      message(error.message || String(error),'error');
+    } finally {
+      if (running===controller) {
+        running=null;
+        controls();
+        preview();
+      }
+    }
+  }
+
+  function segments(id,cues,map,left,span) {
+    const lane=byId(id);
+    lane.replaceChildren();
+    if (!map) return;
+    const fragment=document.createDocumentFragment();
+    for (const cue of cues) {
+      const a=(map(cue.start)-left)/span, b=(map(cue.end)-left)/span;
+      if (a>=1 || b<=0 || !Number.isFinite(a+b)) continue;
+      const mark=document.createElement('i'); mark.className='segment';
+      mark.style.left=(Math.max(0,a)*100)+'%';
+      mark.style.width=(100*(Math.min(1,b)-Math.max(0,a)))+'%';
+      fragment.append(mark);
+    }
+    lane.append(fragment);
+  }
+  function prettyTime(ms, short=false) {
+    if (!Number.isFinite(ms)) return '—';
+    const label=SyncSrt.formatTime(Math.abs(Math.round(ms)));
+    return (ms<0?'−':'')+(short?label.split(/[,.]/)[0]:label);
+  }
+  function preview() {
+    const sample=!tracks.source?.parsed;
+    const cues=sample?example.source.cues:tracks.source.parsed.cues;
+    const map=sample?(time=>time+2400):result?.map;
+    byId('preview-type').textContent=sample?'Example':demoSession?'Demo files':!result?'Original':result.exportable?'Adjusted':'Low confidence';
+    const offset=position==='last'?Math.max(0,cues.length-3):position==='middle'?Math.max(0,Math.floor((cues.length-3)/2)):0;
+    const selected=cues.slice(offset,offset+3);
+    const start=selected[0]?.start ?? 0;
+    const end=selected[selected.length-1]?.end ?? start+30000;
+    const left=Math.max(0,Math.floor((Math.min(start,map?map(start):start)-2000)/1000)*1000);
+    const right=Math.max(left+30000,Math.ceil((Math.max(end,map?map(end):end)+2000)/1000)*1000);
+    byId('range-time').textContent=prettyTime(left,true)+' – '+prettyTime(right,true);
+    for (const [id,time] of [['ruler-start',left],['ruler-mid',(left+right)/2],['ruler-end',right]]) byId(id).textContent=prettyTime(time,true);
+    segments('lane-original',cues,t=>t,left,right-left);
+    segments('lane-adjusted',cues,map,left,right-left);
+    const body=byId('cue-list'); body.replaceChildren();
+    for (const cue of selected) {
+      const row=document.createElement('tr');
+      const line=document.createElement('td'), isolated=document.createElement('bdi');
+      isolated.dir='auto'; isolated.textContent=cue.text;
+      if (mediaReady && !sample) {
+        const jump=document.createElement('button');
+        jump.type='button'; jump.className='play-cue'; jump.textContent='Play';
+        jump.setAttribute('aria-label','Play cue at '+prettyTime(map?map(cue.start):cue.start));
+        jump.addEventListener('click',()=>playCue(map?map(cue.start):cue.start));
+        line.append(jump);
+      }
+      line.append(isolated); row.append(line);
+      for (const label of [prettyTime(cue.start), map?prettyTime(map(cue.start)):'—']) {
+        const td=document.createElement('td'); td.className='time'; td.textContent=label; row.append(td);
+      }
+      body.append(row);
+    }
+    refreshPlayer(sample?null:cues,map || identityTime);
+    byId('estimate-title').textContent=sample?'Example timing':result?.title || 'Awaiting adjustment';
+    byId('estimate-info').textContent=sample?'Load the demo to try these files.':result?.detail || 'Adjusted timestamps will appear here.';
+  }
+  function setMedia(file, separate=false) {
+    if (file===reviewMedia && separate===attachedSeparately) return;
+    attachedSeparately = separate;
+    const player=byId('player');
+    player.pause();
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+    mediaUrl = null; reviewMedia = file; mediaReady = false;
+    mediaName = file?.name || '';
+    byId('player-stage').hidden = true;
+    byId('capture').hidden = true;
+    byId('player-line').textContent = '';
+    player.removeAttribute('src');
+    if (file) {
+      mediaUrl = URL.createObjectURL(file);
+      player.src = mediaUrl;
+      byId('player-note').textContent = 'Checking playback for '+mediaName+'…';
+    } else {
+      byId('player-note').textContent = 'Open a file to check the adjusted cues against the soundtrack.';
+      byId('player-pane').open = false;
+    }
+    player.load();
+  }
+  function refreshPlayer(cues,map) {
+    if (!mediaReady || !cues) {
+      byId('player-line').textContent = '';
+      previousPlaybackSource = null;
+      return;
+    }
+    if (previousPlaybackSource!==cues || previousPlaybackMap!==map) {
+      let until = -Infinity;
+      playbackCues = cues.map(cue=>({start:map(cue.start),end:map(cue.end),text:cue.text})).sort((a,b)=>a.start-b.start);
+      for (const cue of playbackCues) {until=Math.max(until,cue.end); cue.until=until;}
+      previousPlaybackMap=map; previousPlaybackSource=cues;
+    }
+    updatePlaybackLine();
+  }
+  function updatePlaybackLine() {
+    const line=byId('player-line');
+    if (!mediaReady || !previousPlaybackSource) {line.textContent=''; return;}
+    const time=byId('player').currentTime*1000;
+    let low=0, high=playbackCues.length;
+    while (low<high) {
+      const middle=Math.floor((low+high)/2);
+      if (playbackCues[middle].start<=time) low=middle+1;
+      else high=middle;
+    }
+    const lines=[];
+    for (let i=low-1;i>=0 && playbackCues[i].until>time;i--) {
+      if (playbackCues[i].end>time) lines.push(playbackCues[i].text);
+    }
+    line.textContent=lines.reverse().join('\n');
+  }
+  function playCue(at) {
+    const player=byId('player');
+    byId('player-pane').open=true;
+    if (!Number.isFinite(at) || at<0 || at/1000>=player.duration) {
+      byId('player-note').textContent='This cue falls outside the playback file.';
+      return;
+    }
+    player.currentTime=at/1000;
+    player.play().catch(()=>{byId('player-note').textContent='Use the player’s controls to start playback.';});
+  }
+  function download() {
+    if (!result?.exportable) return;
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(new Blob([result.text],{type:'application/x-subrip;charset=utf-8'}));
+    link.download=tracks.source.name.replace(/\.srt$/i,'')+'.synced.srt';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href),30000);
+    message('Exported '+link.download+' as UTF-8.','ok');
+  }
+
+  for (const slot of ['source','ref']) {
+    const input=byId(slot+'-file'), drop=byId(slot+'-drop');
+    input.addEventListener('change',()=>{const file=input.files[0]; input.value=''; choose(slot,file);});
+    byId(slot+'-encoding').addEventListener('change',()=>{if (tracks[slot]?.file) choose(slot,tracks[slot].file);});
+    for (const name of ['dragenter','dragover']) drop.addEventListener(name,event=>{event.preventDefault(); drop.classList.add('over');});
+    drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+    drop.addEventListener('drop',event=>{event.preventDefault(); drop.classList.remove('over'); choose(slot,event.dataTransfer.files[0]);});
+  }
+  byId('movie-track').addEventListener('change',event=>{
+    const ref=tracks.ref;
+    if (!ref?.tracks) return;
+    ref.selected=ref.tracks.find(track=>String(track.id)===event.target.value) || null;
+    invalidate(); guide();
+  });
+  byId('play-file').addEventListener('change',event=>{
+    const file=event.target.files[0]; event.target.value='';
+    if (file) {setMedia(file,true); preview();}
+  });
+  byId('player').addEventListener('loadedmetadata',()=>{
+    const player=byId('player');
+    if (!mediaUrl || player.currentSrc!==mediaUrl) return;
+    mediaReady=true;
+    const label=attachedSeparately?'Playback file: ':'Reference file: ';
+    byId('player-note').textContent=label+mediaName+'. Choose Play beside a cue. For a movie with several soundtracks, playback uses the track selected by your browser.';
+    byId('player-stage').hidden=false; byId('capture').hidden=mode!=='manual';
+    preview();
+  });
+  byId('player').addEventListener('error',()=>{
+    if (!mediaUrl || byId('player').currentSrc!==mediaUrl) return;
+    mediaReady=false;
+    byId('player-note').textContent='This browser cannot play '+mediaName+'. Timing analysis can still use supported tracks. Check timestamps in your usual movie player.';
+    byId('player-stage').hidden=true; byId('capture').hidden=true;
+    preview();
+  });
+  for (const name of ['timeupdate','seeked']) byId('player').addEventListener(name,updatePlaybackLine);
+  byId('capture').addEventListener('click',()=>{
+    if (!mediaReady || mode!=='manual') return;
+    const box=byId('anchor-rows'), row=box.contains(focusedPair)?focusedPair:box.lastElementChild;
+    const input=row.children[1]; input.value=prettyTime(byId('player').currentTime*1000);
+    invalidate(); guide(); input.focus();
+  });
+  byId('demo').addEventListener('click',loadDemo);
+  byId('automatic').addEventListener('click',()=>setMode('automatic'));
+  byId('manual').addEventListener('click',()=>setMode('manual'));
+  byId('add-anchor').addEventListener('click',()=>{addAnchor().firstElementChild.focus(); invalidate(); guide();});
+  byId('run').addEventListener('click',analyze);
+  byId('export').addEventListener('click',download);
+  byId('cancel').addEventListener('click',()=>{stop(); controls(); message('Analysis cancelled.');});
+  for (const button of document.querySelectorAll('[data-position]')) button.addEventListener('click',()=>selectPosition(button.dataset.position));
+  addAnchor();
+  controls();
+  preview();
+})();
+
+</script>
+</body>
+</html>
