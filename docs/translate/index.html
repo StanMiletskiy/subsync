@@ -548,42 +548,91 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     return text.replace(/&(amp|lt|gt|quot|apos);/gi, (_, name) => entities[name.toLowerCase()]);
   }
 
-  function safeText(value, unit) {
-    if (typeof value !== 'string' || !value.trim()) {
+  const dialogueDash = /^[-–—―](?:[ \t]+(?=[^\s\p{N}])|(?=\p{L}))/u;
+  const openingQuote = /^["«“„「『]/u;
+  const stylePair = /^<(i|b|u|s|font)(?:\s[^<>]*)?>([\s\S]*)<\/\1>$/iu;
+  const bbPair = /^\[(i|b|u|s|font|color|size)(?:=[^\]]+)?\]([\s\S]*)\[\/\1\]$/iu;
+
+  function inputText(value, unit) {
+    // Ignore stand-alone joining marks and directional controls when checking
+    // for visible content; leave them intact within real words and emoji.
+    if (typeof value !== 'string' || !value.replace(/[\s\p{Mark}\p{Format}\p{Default_Ignorable_Code_Point}]/gu, '')) {
       throw Object.assign(Error('No translation was returned for cue ' + unit.cue + '.'), {cueNumber:unit.cue, unitId:unit.id});
     }
     if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value) ||
         /(?:^|[\r\n])[ \t]*\d+:[\d:.,]+[ \t]*-->/.test(value) || /\{\\|\\[Nnh]/.test(value)) {
       throw Object.assign(Error('The translation for cue ' + unit.cue + ' contains subtitle controls.'), {cueNumber:unit.cue, unitId:unit.id});
     }
-    return value.trim().replace(/\s+/gu, ' ')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return value.trim().replace(/\s+/gu, ' ');
   }
 
-  function inspect(parsed, addUnit) {
-    let cursor = 0;
+  function encodedText(text, unit, firstOnLine) {
+    // An editor may use brackets within a sentence, e.g. “register [A]”.
+    // A newly wrapped caption or a new speaker turn is a layout change.
+    if ((firstOnLine && dialogueDash.test(text) && !dialogueDash.test(unit.text)) ||
+        /^\[[^\]]*\]$/u.test(text) || /^[♪♫♬]|[♪♫♬]$/u.test(text)) {
+      throw Object.assign(Error('The translation would change subtitle formatting in cue ' + unit.cue + '.'), {cueNumber:unit.cue, unitId:unit.id});
+    }
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(new RegExp(bbcode, 'giu'), token=>'&#91;' + token.slice(1,-1) + '&#93;');
+  }
+
+  function generatedText(value, unit, firstOnLine) {
+    let text = inputText(value, unit);
+    // These wrappers were never sent to the model. Restore layout exclusively
+    // from the source, keeping content (including internal punctuation) intact.
+    let previous;
+    do {
+      previous = text;
+      const style = stylePair.exec(text) || bbPair.exec(text);
+      if (style) text = style[2].trim();
+      else if (/^\[[^\[\]]+\]$/u.test(text)) text = text.slice(1,-1).trim();
+      else text = text.replace(/^[♪♫♬]+\s*|\s*[♪♫♬]+$/gu, '').trim();
+    } while (text !== previous);
+    if (firstOnLine && dialogueDash.test(text) && !dialogueDash.test(unit.text)) {
+      text = text.replace(dialogueDash, '').trimStart();
+      // A translated line can replace an opening quote with a speaker dash.
+      // Its closing quote may be several physical lines away.
+      if (openingQuote.test(unit.text) && !openingQuote.test(text)) text = unit.text[0] + text;
+    }
+    return inputText(text, unit);
+  }
+
+  function inspect(parsed, addUnit, spans) {
+    let cursor = 0, next = 0;
     const layout = [];
     for (const [index, cue] of parsed.cues.entries()) {
-      // This includes the preceding separator, identifier, timing tokens and settings.
       layout.push(parsed.text.slice(cursor, cue.bodyStart));
       const cueLayout = [];
-      const lines = /([^\r\n]*)(\r\n|[\r\n]|$)/g;
-      for (const row of cue.text.matchAll(lines)) {
+      for (const row of cue.text.matchAll(/([^\r\n]*)(\r\n|[\r\n]|$)/g)) {
         if (!row[0]) continue;
         const line = row[1], base = cue.bodyStart + row.index;
-        const marks = [];
         let from = 0;
-        for (const token of line.matchAll(controls)) {
-          if (addUnit) addUnit(line.slice(from, token.index), base + from, index + 1, base);
-          marks.push(token[0]);
-          from = token.index + token[0].length;
+        if (addUnit) {
+          for (const token of line.matchAll(controls)) {
+            addUnit(line.slice(from, token.index), base + from, index + 1, base);
+            from = token.index + token[0].length;
+          }
+          addUnit(line.slice(from), base + from, index + 1, base);
+        } else {
+          // Compare every literal between writable spans, including dashes, tags,
+          // separators and whitespace. Never reclassify a source-owned character
+          // by inspecting the adjacent first letter of the translated text.
+          const literal = [];
+          while (next < spans.length && spans[next].start < base + line.length) {
+            const span = spans[next++];
+            if (span.start < base + from || span.end > base + line.length) throw Error('Invalid subtitle formatting boundaries.');
+            literal.push(line.slice(from, span.start - base));
+            from = span.end - base;
+          }
+          literal.push(line.slice(from));
+          cueLayout.push([row[2], literal]);
         }
-        if (addUnit) addUnit(line.slice(from), base + from, index + 1, base);
-        cueLayout.push([row[2], /^\s*/u.exec(line)[0], /\s*$/u.exec(line)[0], marks]);
       }
       layout.push(cueLayout);
       cursor = cue.bodyEnd;
     }
+    if (!addUnit && next !== spans.length) throw Error('Invalid subtitle formatting boundaries.');
     layout.push(parsed.text.slice(cursor));
     return JSON.stringify(layout);
   }
@@ -622,7 +671,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
   function prepare(decodedText) {
     const parsed = srt.parse(decodedText);
     const units = [], spans = [];
-    const originalLayout = inspect(parsed, (text, offset, cue, line) => {
+    inspect(parsed, (text, offset, cue, line) => {
       const raw = text.trim();
       if (!/\p{L}/u.test(raw)) return;
       const start = offset + text.length - text.trimStart().length;
@@ -632,21 +681,44 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     // Sample across the file since a title card or a credit may use a different language.
     const samples = [], count = Math.min(units.length, 24);
     for (let i = 0; i < count; i++) samples.push(units[Math.floor((i + 0.5) * units.length / count)].text);
+    const originalLayout = inspect(parsed, null, spans);
     const cues = reviewCues(parsed, units, spans);
+    const atStart = i => i === 0 || units[i].line !== units[i-1].line;
+
+    function normalizeGenerated(strings) {
+      if (!Array.isArray(strings) || strings.length !== units.length) throw Error('The translation is incomplete.');
+      const lines = strings.slice();
+      let firstError;
+      for (const [i, unit] of units.entries()) {
+        if (lines[i] === unit.text) continue;
+        try {
+          lines[i] = generatedText(lines[i], unit, atStart(i));
+          encodedText(lines[i], unit, atStart(i));
+        } catch (error) {
+          if (!firstError) firstError = error;
+          if (typeof lines[i] !== 'string') lines[i] = '';
+        }
+      }
+      if (firstError) throw Object.assign(firstError, {reviewLines:lines});
+      return lines;
+    }
 
     function render(strings) {
       if (!Array.isArray(strings) || strings.length !== units.length) throw Error('The translation is incomplete.');
-      const result = [];
-      let cursor = 0;
+      const result = [], outputSpans = [];
+      let cursor = 0, delta = 0;
       for (let i = 0; i < units.length; i++) {
         const span = spans[i], unit = units[i];
-        const replacement = strings[i] === unit.text ? span.raw : safeText(strings[i], unit);
+        const replacement = strings[i] === unit.text ? span.raw : encodedText(inputText(strings[i], unit), unit, atStart(i));
+        const start = span.start + delta;
+        outputSpans.push({start, end:start + replacement.length});
+        delta += replacement.length - span.raw.length;
         result.push(decodedText.slice(cursor, span.start), replacement);
         cursor = span.end;
       }
       result.push(decodedText.slice(cursor));
       const output = result.join('');
-      const outputLayout = inspect(srt.parse(output));
+      const outputLayout = inspect(srt.parse(output), null, outputSpans);
       if (outputLayout !== originalLayout) {
         // Header/body entries alternate in the signatures. Locate the first damaged
         // cue only on failure so valid downloads do not pay for per-cue comparisons.
@@ -664,7 +736,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       }
       return output;
     }
-    return {units, cues, render,
+    return {units, cues, normalizeGenerated, render,
       cueCount:parsed.cues.length, sample:samples.join(' ').slice(0, 1800)};
   }
 
@@ -1046,7 +1118,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         record.generatedLines.length !== record.editedLines.length) return false;
     for (let i = 0; i < record.editedLines.length; i++) {
       if (typeof record.editedLines[i] !== 'string' || !record.editedLines[i].trim() ||
-          typeof record.generatedLines[i] !== 'string' || !record.generatedLines[i].trim()) return false;
+          typeof record.generatedLines[i] !== 'string') return false;
     }
     return true;
   }
@@ -1375,6 +1447,11 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     for (let i = 0; i < text.length; i++) view.setUint16(2 * i, text.charCodeAt(i), encoding === 'utf-16le');
     return new Blob([data], {type});
   }
+  function completedMessage(prepared) {
+    return 'Translation complete. ' + prepared.cueCount.toLocaleString() +
+      (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.';
+  }
+
   function resultWorkspace(scope, onResume) {
     const doc = scope.document;
     const el = id => doc.getElementById(id);
@@ -1417,16 +1494,27 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       el('translation-output').hidden = true; download.disabled = true;
       status.dataset.kind = ''; status.textContent = ''; updateButtons();
     }
-    function open(prepared, item, isSaved = false) {
+    function open(prepared, item, isSaved = false, issue = null) {
       const lines = item.editedLines || item.generatedLines;
-      prepared.render(lines);
-      current = {prepared, item}; stored = isSaved; lastDownload = null;
       review.load(prepared, item.generatedLines, lines);
+      current = {prepared, item, issue}; stored = isSaved; lastDownload = null;
       el('result-file').textContent = exportName(item);
       el('translation-output').hidden = false; download.disabled = false;
       status.dataset.kind = '';
       status.textContent = isSaved ? 'Saved review restored.' : '';
       updateButtons();
+      if (issue) reportInvalid(issue);
+    }
+    function renderCurrent(active, lines) {
+      const text = active.prepared.render(lines);
+      if (active.issue) {
+        active.issue = null;
+        const summary = el('translation-status');
+        summary.textContent = completedMessage(active.prepared);
+        summary.dataset.kind = 'ok';
+        status.textContent = ''; status.dataset.kind = '';
+      }
+      return text;
     }
     function reportInvalid(error) {
       status.textContent = error.message || 'Check the edited dialogue and try again.';
@@ -1444,7 +1532,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     save.addEventListener('click', async () => {
       if (!current || busy) return;
       const active = current, lines = review.getLines();
-      try { active.prepared.render(lines); } catch (error) { reportInvalid(error); return; }
+      try { renderCurrent(active, lines); } catch (error) { reportInvalid(error); return; }
       busy = true; updateButtons();
       try {
         await initialRead;
@@ -1471,7 +1559,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       if (!current) return;
       const lines = review.getLines();
       try {
-        const text = current.prepared.render(lines);
+        const text = renderCurrent(current, lines);
         const url = scope.URL.createObjectURL(subtitleBlob(text, current.item.encoding));
         const link = doc.createElement('a');
         link.href = url; link.download = exportName(current.item); doc.body.append(link); link.click(); link.remove();
@@ -1686,11 +1774,23 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           },
         });
         if (task !== current || signal.aborted) return;
-        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
-          targetLanguage:plan.target, encoding:encodingForExport, generatedLines:lines});
+        let generatedLines, issue = null;
+        try {
+          generatedLines = prepared.normalizeGenerated(lines);
+          prepared.render(generatedLines);
+        } catch (error) {
+          // Keep a complete generated translation available for repair. A missing
+          // result array has no safe mapping back to the original subtitle.
+          generatedLines = error.reviewLines || generatedLines || lines;
+          if (!Array.isArray(generatedLines) || generatedLines.length !== prepared.units.length ||
+              Array.from(generatedLines).some(line => typeof line !== 'string')) throw error;
+          issue = error;
+        }
         lastSourceChoice = source.value; lastTargetChoice = target.value;
-        message('Translation complete. ' + prepared.cueCount.toLocaleString() +
-          (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
+        if (issue) message('Translation finished. Check the highlighted dialogue before saving or downloading.', 'error');
+        else message(completedMessage(prepared), 'ok');
+        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue);
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
@@ -1701,7 +1801,10 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 
     function restoreDraft(snapshot) {
       const restored = scope.CueTranslationSrt.prepare(snapshot.sourceText);
-      restored.render(snapshot.generatedLines);
+      // The generated baseline may contain the very error the user corrected.
+      // Only the saved, edited output is eligible for download.
+      if (!Array.isArray(snapshot.generatedLines) || snapshot.generatedLines.length !== restored.units.length ||
+          Array.from(snapshot.generatedLines).some(line => typeof line !== 'string')) throw Error('Incomplete saved review.');
       restored.render(snapshot.editedLines);
       ++selection; stopDetector(); resetWork();
       fileInput.value = '';

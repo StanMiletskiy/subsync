@@ -60,7 +60,7 @@ function editingReview(onDirtyChange) {
     edit(i, value) { current[i] = value; onDirtyChange(hasUnsaved()); },
     getLines() { return current.slice(); },
     hasUnsaved,
-    focusUnit() { return false; },
+    focusUnit(id) { this.focusedUnit = id; return Number.isInteger(id); },
     focusInvalid() { return false; },
     markSaved(lines) { baseline = lines.slice(); onDirtyChange(hasUnsaved()); },
   };
@@ -331,4 +331,65 @@ test('declining to replace another subtitle’s saved review keeps that saved co
   assert.equal(draft.writes, 1);
   assert.equal(draft.record.filename, 'first.srt');
   assert.deepEqual(state.review.getLines(), ['Una revisión.']);
+});
+
+function generatedResult(lines) {
+  return {start:async () => ({
+    mode:'standard', destroy() {}, async translate() { return lines.slice(); }
+  })};
+}
+
+test('newly generated dialogue is cleaned before review, while manual edits stay strict', async () => {
+  const {state, ids, choose, draft} = setup({engine:generatedResult(['— ¡Hola!'])});
+  await choose();
+  await ids.translate.fire('click');
+  assert.deepEqual(state.review.getLines(), ['¡Hola!']);
+  ids.export.click();
+  assert.equal(await state.blob.text(), subtitle.replace('Hello!', '¡Hola!'));
+  state.blob = undefined;
+  state.review.edit(0, '— Mi edición.');
+  ids.export.click(); await ids['review-save'].fire('click');
+  assert.equal(state.blob, undefined);
+  assert.equal(draft.writes, 0);
+  assert.deepEqual(state.review.getLines(), ['— Mi edición.']);
+});
+
+test('one invalid generated fragment opens the complete review; correcting it can save, reload and export without rerunning', async () => {
+  const source = subtitle + '\r\n8\r\n00:00:03,000 --> 00:00:04,200\r\nSecond line.\r\n' +
+    '\r\n9\r\n00:00:04,300 --> 00:00:05,600\r\nThird line.\r\n';
+  const invalid = '00:00:01,010 --> 00:00:03,200';
+  const draft = memoryDraft();
+  const {state, ids, choose} = setup({draft, engine:generatedResult(['— ¡Hola!',invalid,'Tercera línea.'])});
+  await choose('full.srt',source);
+  await ids.translate.fire('click');
+  assert.equal(ids['translation-output'].hidden, false);
+  assert.equal(state.review.focusedUnit, 1);
+  assert.deepEqual(state.review.getLines(), ['¡Hola!', invalid, 'Tercera línea.']);
+  assert.match(ids['translation-status'].textContent, /highlighted dialogue/i);
+  assert.match(ids['review-status'].textContent, /cue 2/i);
+  ids.export.click(); await ids['review-save'].fire('click');
+  assert.equal(state.blob, undefined); assert.equal(draft.writes, 0);
+  state.review.edit(1, 'Segunda línea.');
+  await ids['review-save'].fire('click');
+  assert.equal(draft.writes, 1);
+  assert.equal(draft.record.generatedLines[1], invalid);
+  assert.equal(draft.record.editedLines[1], 'Segunda línea.');
+  assert.match(ids['translation-status'].textContent, /ready to export/i);
+  const reload = setup({draft});
+  await flush(); reload.ids['resume-draft'].click();
+  assert.equal(reload.ids['translation-output'].hidden, false);
+  reload.ids.export.click();
+  assert.equal(await reload.state.blob.text(), source.replace('Hello!', '¡Hola!')
+    .replace('Second line.', 'Segunda línea.').replace('Third line.', 'Tercera línea.'));
+  assert.equal(reload.state.starts, 0);
+});
+
+test('a truncated model result cannot be offered as a complete review or download', async () => {
+  const {state, ids, choose, draft} = setup({engine:generatedResult([])});
+  await choose();
+  await ids.translate.fire('click');
+  assert.equal(ids['translation-output'].hidden, true);
+  assert.equal(ids.export.disabled, true);
+  ids.export.click(); await ids['review-save'].fire('click');
+  assert.equal(state.blob, undefined); assert.equal(draft.writes, 0);
 });

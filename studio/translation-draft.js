@@ -21,7 +21,7 @@
         record.generatedLines.length !== record.editedLines.length) return false;
     for (let i = 0; i < record.editedLines.length; i++) {
       if (typeof record.editedLines[i] !== 'string' || !record.editedLines[i].trim() ||
-          typeof record.generatedLines[i] !== 'string' || !record.generatedLines[i].trim()) return false;
+          typeof record.generatedLines[i] !== 'string') return false;
     }
     return true;
   }

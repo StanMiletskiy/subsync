@@ -85,6 +85,16 @@ function draft() {
     encoding:'utf-16le', generatedLines:['Здравствуйте.','Спасибо!'], editedLines:['Привет.','Спасибо!']};
 }
 
+test('an empty machine baseline can be stored once the corresponding dialogue is corrected', async () => {
+  const db = storage(), api = page(db);
+  const repaired = {...draft(), generatedLines:['','Спасибо!']};
+  await api.save(repaired);
+  const restored = await page(db).load();
+  assert.equal(restored.generatedLines[0], '');
+  assert.equal(restored.editedLines[0], 'Привет.');
+  await assert.rejects(api.save({...repaired, editedLines:['','Спасибо!']}), /incomplete/);
+});
+
 test('only an explicit save creates a draft, and a fresh page can export the saved edits offline', async () => {
   const db = storage(), first = page(db);
   assert.equal(await first.load(), null);

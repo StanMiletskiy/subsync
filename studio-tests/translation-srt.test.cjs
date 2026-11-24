@@ -143,3 +143,57 @@ test('save errors identify the source cue and text field across arbitrarily numb
   values[25] = 'Au revoir.';
   assert.doesNotThrow(() => p.render(values));
 });
+
+test('generated literary quotations preserve the original opener when Chrome substitutes a speaker dash', () => {
+  const input = '\uFEFF76\r\n02:08:55,166 --> 02:08:58,625\r\n"Stop right there!\r\nYou are staying here,"\r\n';
+  const p = prepare(input), raw = ['— Остановись сейчас!', 'Ты остаёшься здесь,"'];
+  const lines = p.normalizeGenerated(raw);
+  assert.deepEqual(raw,['— Остановись сейчас!', 'Ты остаёшься здесь,"']);
+  assert.deepEqual(lines,['"Остановись сейчас!', 'Ты остаёшься здесь,"']);
+  assert.equal(p.render(lines),input.replace('"Stop right there!',lines[0]).replace('You are staying here,"',lines[1]));
+  assert.throws(()=>p.render(raw),error=>error.cueNumber===1 && error.unitId===0);
+});
+
+test('immutable unspaced speaker prefix survives translated quotes, ellipses or a number', () => {
+  const raw = 'first\n00:00:00,100 --> 00:00:02,000  X1:40\n-Listen.\n<i>-Repeat.</i>\n—Another answer.';
+  const p = prepare(raw);
+  const lines = ['«Слушай».','…Ещё раз.','123'];
+  assert.deepEqual(p.normalizeGenerated(lines),lines);
+  assert.equal(p.render(lines),raw.replace('Listen.','«Слушай».').replace('Repeat.','…Ещё раз.').replace('Another answer.','123'));
+});
+
+test('normalizes generated wrappers once while retaining literal brackets, negative numbers and internal dashes', () => {
+  const raw = '11\n00:00:00,100 --> 00:00:05,000\n[Alarm]\n—  Hello.\n♪ Song ♪\nTransform.\nCold.';
+  const p = prepare(raw);
+  const originals=['<i>[Сирена]</i>','— Привет.','♫ Песня ♫','Регистр [A] — здесь.','- 5 градусов.'];
+  const values=p.normalizeGenerated(originals);
+  assert.deepEqual(values,['Сирена','Привет.','Песня','Регистр [A] — здесь.','- 5 градусов.']);
+  assert.equal(p.render(values),raw.replace('Alarm',values[0]).replace('Hello.',values[1]).replace('Song',values[2]).replace('Transform.',values[3]).replace('Cold.',values[4]));
+  for (const minus of ['-5 °C','−7 градусов','- 9 часов']) assert.equal(p.normalizeGenerated([...values.slice(0,4),minus])[4],minus);
+});
+
+test('one irrecoverable generated field leaves other normalized fields reviewable; invalid edits still block', () => {
+  const p=prepare('1\n00:00:01,000 --> 00:00:03,000\nOne.\nTwo.\nThree.');
+  assert.throws(()=>p.normalizeGenerated(['— Раз.',null,'♪ Три. ♪']),e=>
+    e.unitId===1 && e.cueNumber===1 && JSON.stringify(e.reviewLines)===JSON.stringify(['Раз.','','Три.']));
+  assert.throws(()=>p.normalizeGenerated(['missing']),/incomplete/);
+  for (const item of ['{\\an8}code','Hello\n42\n00:00:03,000 --> 00:00:05,000\nextra']) {
+    assert.throws(()=>p.normalizeGenerated(['Раз.',item,'Три.']),e=>e.unitId===1 && e.reviewLines[1]===item);
+  }
+  assert.throws(()=>p.render(['Раз.','[Speaker added]','Три.']),e=>e.unitId===1);
+  assert.equal(p.render(['Раз.','Символ [b] буквально.','Три.']).includes('Символ &#91;b&#93; буквально.'),true);
+});
+
+test('rejects invisible-only output while retaining joining characters and marks in meaningful text', () => {
+  const original = '001\n00:00:01,250 --> 00:00:02,850\nنِیم\u200cروز';
+  const p=prepare(original);
+  assert.equal(p.render(p.units.map(u=>u.text)), original);
+  for (const value of ['\u200b\u200d\u200c','\u2067\u2069\uFE0F','\u0301\u064e','\u3164']) {
+    assert.throws(()=>p.normalizeGenerated([value]), error=>error.cueNumber===1 && error.unitId===0);
+    assert.throws(()=>p.render([value]), error=>error.unitId===0);
+  }
+  for (const visible of ['خانه\u200cها','👩\u200d🚀','cafe\u0301','…']) {
+    assert.equal(p.normalizeGenerated([visible])[0],visible);
+    assert.ok(p.render([visible]).endsWith(visible));
+  }
+});

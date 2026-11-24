@@ -26,6 +26,11 @@
     for (let i = 0; i < text.length; i++) view.setUint16(2 * i, text.charCodeAt(i), encoding === 'utf-16le');
     return new Blob([data], {type});
   }
+  function completedMessage(prepared) {
+    return 'Translation complete. ' + prepared.cueCount.toLocaleString() +
+      (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.';
+  }
+
   function resultWorkspace(scope, onResume) {
     const doc = scope.document;
     const el = id => doc.getElementById(id);
@@ -68,16 +73,27 @@
       el('translation-output').hidden = true; download.disabled = true;
       status.dataset.kind = ''; status.textContent = ''; updateButtons();
     }
-    function open(prepared, item, isSaved = false) {
+    function open(prepared, item, isSaved = false, issue = null) {
       const lines = item.editedLines || item.generatedLines;
-      prepared.render(lines);
-      current = {prepared, item}; stored = isSaved; lastDownload = null;
       review.load(prepared, item.generatedLines, lines);
+      current = {prepared, item, issue}; stored = isSaved; lastDownload = null;
       el('result-file').textContent = exportName(item);
       el('translation-output').hidden = false; download.disabled = false;
       status.dataset.kind = '';
       status.textContent = isSaved ? 'Saved review restored.' : '';
       updateButtons();
+      if (issue) reportInvalid(issue);
+    }
+    function renderCurrent(active, lines) {
+      const text = active.prepared.render(lines);
+      if (active.issue) {
+        active.issue = null;
+        const summary = el('translation-status');
+        summary.textContent = completedMessage(active.prepared);
+        summary.dataset.kind = 'ok';
+        status.textContent = ''; status.dataset.kind = '';
+      }
+      return text;
     }
     function reportInvalid(error) {
       status.textContent = error.message || 'Check the edited dialogue and try again.';
@@ -95,7 +111,7 @@
     save.addEventListener('click', async () => {
       if (!current || busy) return;
       const active = current, lines = review.getLines();
-      try { active.prepared.render(lines); } catch (error) { reportInvalid(error); return; }
+      try { renderCurrent(active, lines); } catch (error) { reportInvalid(error); return; }
       busy = true; updateButtons();
       try {
         await initialRead;
@@ -122,7 +138,7 @@
       if (!current) return;
       const lines = review.getLines();
       try {
-        const text = current.prepared.render(lines);
+        const text = renderCurrent(current, lines);
         const url = scope.URL.createObjectURL(subtitleBlob(text, current.item.encoding));
         const link = doc.createElement('a');
         link.href = url; link.download = exportName(current.item); doc.body.append(link); link.click(); link.remove();
@@ -337,11 +353,23 @@
           },
         });
         if (task !== current || signal.aborted) return;
-        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
-          targetLanguage:plan.target, encoding:encodingForExport, generatedLines:lines});
+        let generatedLines, issue = null;
+        try {
+          generatedLines = prepared.normalizeGenerated(lines);
+          prepared.render(generatedLines);
+        } catch (error) {
+          // Keep a complete generated translation available for repair. A missing
+          // result array has no safe mapping back to the original subtitle.
+          generatedLines = error.reviewLines || generatedLines || lines;
+          if (!Array.isArray(generatedLines) || generatedLines.length !== prepared.units.length ||
+              Array.from(generatedLines).some(line => typeof line !== 'string')) throw error;
+          issue = error;
+        }
         lastSourceChoice = source.value; lastTargetChoice = target.value;
-        message('Translation complete. ' + prepared.cueCount.toLocaleString() +
-          (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
+        if (issue) message('Translation finished. Check the highlighted dialogue before saving or downloading.', 'error');
+        else message(completedMessage(prepared), 'ok');
+        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue);
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
@@ -352,7 +380,10 @@
 
     function restoreDraft(snapshot) {
       const restored = scope.CueTranslationSrt.prepare(snapshot.sourceText);
-      restored.render(snapshot.generatedLines);
+      // The generated baseline may contain the very error the user corrected.
+      // Only the saved, edited output is eligible for download.
+      if (!Array.isArray(snapshot.generatedLines) || snapshot.generatedLines.length !== restored.units.length ||
+          Array.from(snapshot.generatedLines).some(line => typeof line !== 'string')) throw Error('Incomplete saved review.');
       restored.render(snapshot.editedLines);
       ++selection; stopDetector(); resetWork();
       fileInput.value = '';
