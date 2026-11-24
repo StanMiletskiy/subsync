@@ -80,7 +80,7 @@
     const ref = tracks.ref;
     const hasRef = ref?.parsed || ref?.kind==='wav' || ref?.selected;
     byId('run').disabled = !!running || !tracks.source?.parsed || (mode==='automatic' && !hasRef);
-    byId('run').textContent = running ? 'Analyzing…' : mode==='automatic' ? 'Find timing' : 'Preview adjustment';
+    byId('run').textContent = running ? 'Analyzing…' : 'Correct Timings';
     byId('cancel').hidden = !running;
     byId('export').disabled = !result?.exportable;
   }
@@ -92,7 +92,7 @@
     } else if (!source?.parsed) {
       message(mode==='automatic' ? 'Choose your subtitle and timing reference to begin.' : 'Choose the subtitle you want to adjust.');
     } else if (mode==='manual') {
-      message('Set matching times, then preview the adjustment.');
+      message('Enter matching subtitle and film times.');
     } else if (!ref) {
       message('Choose a reference timed to the release you want.');
     } else if (ref.tracks?.length > 1 && !ref.selected) {
@@ -273,7 +273,7 @@
         });
         map=SyncSrt.anchors(pairs);
         title=pairs.length===1?'Offset '+signedSeconds(pairs[0].target-pairs[0].source):pairs.length+' timing pairs';
-        detail='Review the adjusted cues before export.';
+        detail=pairs.length===1?'Applied to every cue.':'Adjusted using your matching times.';
       } else {
         const ref=tracks.ref;
         const job={cues:timingOnly(parsed.cues),kind:ref.kind};
@@ -287,25 +287,25 @@
         },controller.signal,runWorker);
         if (running!==controller) return;
         if (!Number.isFinite(answer.scale) || answer.scale<=0 || !Number.isFinite(answer.offsetMs)) throw Error(answer.reason || 'No timing estimate. Use manual anchors or choose another reference.');
-        map=time=>SyncAlign.mapTime(answer,time);
+        map=SyncSrt.fitOpening(parsed.cues,time=>SyncAlign.mapTime(answer,time));
         const edits=answer.edits || [], review=answer.reviewRanges || [];
-        exportable=!!answer.reliable && !review.length;
-        sections=timingSections(parsed.cues,edits,review);
+        exportable=!!answer.reliable;
+        sections=timingSections(parsed.cues,edits,exportable?[]:review);
         const drift=((answer.scale-1)*100);
         const sign=drift>=0?'+':'−';
         title=(edits.length?'Starting offset ':'Offset ')+signedSeconds(answer.offsetMs);
-        detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · match score '+Math.round(answer.score*100)+'%';
-        if (!exportable) message(review.length
-          ? 'Timing needs review. Choose a flagged section in the preview.'
-          : answer.reason || 'Weak timing match. Try manual anchors or another reference.','error');
+        detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · timing match score '+Math.round(answer.score*100)+'%';
+        if (!exportable) message(answer.reason || 'Weak timing match. Try manual anchors or another reference.','error');
       }
       let text;
       if (exportable) text=SyncSrt.render(parsed,map);
       result={map,title,detail,exportable,text,sections};
       showSections();
-      if (exportable) message(sections.length
-        ? 'Timing adjusted for this cut. Check the timing changes in the preview.'
-        : 'Timing ready. Check the start, middle, and end before exporting.','ok');
+      if (exportable) {
+        const count=parsed.cues.length;
+        const coverage=count===1?'1 cue included.':'All '+count.toLocaleString()+' cues included.';
+        message('Corrected SRT is ready to export. '+coverage,'ok');
+      }
     } catch (error) {
       if (running!==controller) return;
       message(error.message || String(error),'error');
@@ -342,7 +342,9 @@
     const sections = [
       ...edits.map(edit => ({
         at: edit.sourceMs,
-        note: 'Subsequent cues move '+(Math.abs(edit.deltaMs)/1000).toFixed(3)+' s '+
+        end: edit.bridge?.endMs,
+        note: (edit.bridge?'By the end of this section, cues move ':'Subsequent cues move ')+
+          (Math.abs(edit.deltaMs)/1000).toFixed(3)+' s '+
           (edit.deltaMs>0?'later.':'earlier.'),
       })),
       ...ranges.map(range => ({at:range.startMs, end:range.endMs, note:range.reason, flagged:true})),
@@ -373,8 +375,8 @@
       row.className=section.flagged?'flagged':'corrected';
       button.type='button'; button.className='section-jump'; button.dataset.position=section.position;
       let label=prettyTime(section.at,true);
-      if (section.flagged && prettyTime(section.end,true)!==label) label+='–'+prettyTime(section.end,true);
-      button.textContent=(section.flagged?'Review ':'Check ')+label;
+      if (section.end!=null && prettyTime(section.end,true)!==label) label+='–'+prettyTime(section.end,true);
+      button.textContent=(section.flagged?'Review ':'Show ')+label;
       button.addEventListener('click',()=>{
         selectPosition(section.position);
         if (mediaReady) playCue(result.map(tracks.source.parsed.cues[section.index].start));

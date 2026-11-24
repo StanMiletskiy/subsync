@@ -60,3 +60,39 @@ test('decoder keeps UTF BOM, accepts UTF-16BE/LE and deliberately selected legac
   const view = new Uint8Array([0, 65, 66, 0]).subarray(1, 3);
   assert.equal(decode(view), 'AB');
 });
+
+test('automatic mapping fits a whole pre-zero title block while keeping source spacing and corrected dialogue', () => {
+  const {fitOpening} = require('../studio/srt.js');
+  const p = parse('17\n00:00:00,000 --> 00:00:00,450\nOpening\n\n18\n00:00:00,620 --> 00:00:01,200\n第二句\n\n20\n00:00:12,000 --> 00:00:13,000\nDialogue');
+  const correction = time => time * 1.001 - 9000;
+  const map = fitOpening(p.cues, correction);
+  const output = parse(render(p, map));
+  assert.deepEqual(output.cues.map(c => [c.start,c.end,c.text]),
+    [[0,450,'Opening'],[620,1200,'第二句'],[3012,4013,'Dialogue']]);
+  for (let i = 0; i < p.cues.length; i++) {
+    const {start,end} = p.cues[i];
+    assert.deepEqual([Math.round(map(start)),Math.round(map(end))],[output.cues[i].start,output.cues[i].end]);
+  }
+  assert.throws(() => render(p, correction), /Cue 1 would start before/); // Manual correction stays strict.
+});
+
+test('automatic mapping trims only the part of a crossing cue that is before time zero', () => {
+  const {fitOpening} = require('../studio/srt.js');
+  const shift = time => time - 9000;
+  const cues = [{start:8000,end:9500}, {start:12000,end:14500}];
+  const map = fitOpening(cues,shift);
+  assert.deepEqual(cues.map(c=>[map(c.start),map(c.end)]),[[0,500],[3000,5500]]);
+  assert.equal(fitOpening(cues.slice(1),shift),shift);
+});
+
+test('automatic mapping refuses to move titles without enough empty opening time', () => {
+  const {fitOpening} = require('../studio/srt.js');
+  const shift = time => time - 9000;
+  const title = {start:0,end:1200};
+  assert.equal(fitOpening([title,{start:9500,end:12000}],shift),shift);
+  assert.equal(fitOpening([title,{start:8900,end:11000}],shift),shift);
+  assert.equal(fitOpening([title],shift),shift);
+  const touching = fitOpening([title,{start:10200,end:12200}],shift);
+  assert.equal(touching(title.end),1200);
+  assert.equal(touching(10200),1200);
+});

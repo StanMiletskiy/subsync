@@ -117,6 +117,32 @@
     return { text, cues };
   }
 
+  // A source-only opening title can fall entirely before zero after a valid automatic
+  // correction. Relocate the opening block only when its full original span fits.
+  function fitOpening(cues, map) {
+    let firstTitle = Infinity, lastTitle = -Infinity;
+    let nextSource = Infinity, nextStart = Infinity, crossesZero = false;
+    for (const cue of cues) {
+      const start = Math.round(map(cue.start)), end = Math.round(map(cue.end));
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end <= start) return map;
+      if (end <= 0) {
+        firstTitle = Math.min(firstTitle, cue.start);
+        lastTitle = Math.max(lastTitle, cue.end);
+      } else if (start < 0) {
+        crossesZero = true;
+      } else {
+        nextStart = Math.min(nextStart, start);
+        nextSource = Math.min(nextSource, cue.start);
+      }
+    }
+    if (lastTitle === -Infinity) return crossesZero ? time => Math.max(0, map(time)) : map;
+    // A cue crossing zero already occupies the opening. An absent or earlier source
+    // neighbour also means there is no verified empty interval for this block.
+    if (crossesZero || !Number.isFinite(nextStart) || lastTitle >= nextSource ||
+        lastTitle - firstTitle > nextStart) return map;
+    return time => time >= firstTitle && time <= lastTitle ? time - firstTitle : map(time);
+  }
+
   function render(parsed, map) {
     const chunks = [];
     let cursor = 0;
@@ -168,7 +194,7 @@
     };
   }
 
-  const api = { decode, parse, parseTime, formatTime, render, anchors };
+  const api = { decode, parse, parseTime, formatTime, render, anchors, fitOpening };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   globalThis.SyncSrt = api;
 })();

@@ -54,7 +54,7 @@
           <button type="button" class="text-button" id="add-anchor">+ Add timing pair</button>
           <p class="time-hint">Format: HH:MM:SS,mmm</p>
         </div>
-        <button type="button" class="primary" id="run" disabled>Find timing</button>
+        <button type="button" class="primary" id="run" disabled>Correct Timings</button>
         <button type="button" class="text-button" id="cancel" hidden>Cancel analysis</button>
         <p class="status" id="status" role="status" aria-live="polite">Choose your subtitle and timing reference to begin.</p>
       </section>
@@ -91,7 +91,7 @@
     <details class="help"><summary>Working with a movie or a different cut?</summary>
       <p>Choose a timed SRT, an embedded text track in an MKV or MP4 movie, or a soundtrack your browser can decode. For other audio formats, extract the dialogue track as a mono WAV. With FFmpeg installed, this command selects the first audio track. Choose the audio track that matches your film.</p>
       <pre><code>ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"</code></pre>
-      <p>Automatic alignment compares dialogue timing across the film. When the timing changes partway through, the preview shows where a correction was applied or where the match needs review. Choose a section to inspect the surrounding cues. For an uncertain cut between cues, use four manual pairs. Pick one early in the film, one just before the cut, one just after it, and one near the end. Lines missing from the release need editing separately.</p>
+      <p>Automatic alignment compares dialogue timing across the film and applies timing changes it can match. When the correction is ready, select Export SRT to save it. If the overall match is too weak, choose a different reference or use manual anchors. For a cut between cues, place a pair early in the film, one just before the cut, one just after it, and one near the end. Lines missing from the release need editing separately.</p>
     </details>
     <footer><span>Cueframe</span><span>Subtitle and audio files stay on this device.</span></footer>
   </main>

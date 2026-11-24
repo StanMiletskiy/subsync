@@ -94,6 +94,8 @@ test('startup contains no sample and enables preview and export as local files a
   for (const id of ['estimate-title', 'estimate-info', 'range-time']) assert.equal(n[id].textContent || '', '');
   assert.equal(n.run.disabled, true);
   assert.equal(n.export.disabled, true);
+  assert.equal(n.run.textContent, 'Correct Timings');
+  assert.match(ui.html, /<button\b[^>]*id="run"[^>]*>Correct Timings<\/button>/);
 
   await chooseSubtitle(ui, 'source');
   assert.equal(n['preview-empty'].hidden, true);
@@ -149,8 +151,35 @@ test('ordinary matches keep the compact preview; a later correction reaches both
   }
 });
 
-test('flagged ranges disable export, jump to their own cues, and clear with a mode change', async () => {
-  const ui = studio(cues => ({...fit, reviewRanges:[14, 45].map(i => ({
+test('a supported automatic match with a local mismatch exports all cues without a review prompt', async () => {
+  const ui = studio(cues => ({
+    offsetMs:14910, scale:1.00099, score:0.84, reliable:true,
+    reviewRanges:[{startMs:cues[14].start, endMs:cues[17].end, reason:'Local mismatch.'}],
+  }));
+  const n = ui.nodes;
+  await chooseSubtitle(ui, 'source');
+  await chooseSubtitle(ui, 'ref');
+  await n.run.click();
+  assert.equal(n.export.disabled, false);
+  assert.equal(n['timing-sections'].hidden, true);
+  assert.equal(n['section-list'].children.length, 0);
+  assert.doesNotMatch(n.status.textContent, /review|flagged|check|mismatch/i);
+  assert.match(n.status.textContent, /export/i);
+  assert.match(n.status.textContent, /all 55 cues included/i);
+  assert.match(n['estimate-info'].textContent, /timing match score 84%/i);
+  assert.equal(n['preview-type'].textContent, 'Adjusted');
+  await n.export.click();
+  const exported = SyncSrt.parse(await ui.download.text()).cues;
+  assert.equal(exported.length, ui.cues.length);
+  for (const [i, cue] of exported.entries()) {
+    assert.equal(cue.start, Math.round(ui.cues[i].start * 1.00099 + 14910));
+    assert.equal(cue.end, Math.round(ui.cues[i].end * 1.00099 + 14910));
+    assert.equal(cue.text, '字幕 ' + (i + 1));
+  }
+});
+
+test('unsupported ranges disable export, jump to their own cues, and clear with a mode change', async () => {
+  const ui = studio(cues => ({...fit, reliable:false, reason:'No supported timing map.', reviewRanges:[14, 45].map(i => ({
     startMs:cues[i].start + 1, endMs:cues[i+1].end, reason:'No matching cue in this section.',
   }))}));
   const n = ui.nodes;
@@ -167,6 +196,25 @@ test('flagged ranges disable export, jump to their own cues, and clear with a mo
   await n.export.click();
   assert.equal(ui.download, undefined);
   await n.manual.click();
+  assert.equal(n.run.textContent, 'Correct Timings');
   assert.equal(n['timing-sections'].hidden, true);
   assert.equal(ui.positions[0]['aria-pressed'], 'true');
+});
+
+test('an ambiguous new result cannot export a previous successful correction', async () => {
+  let ambiguous = false;
+  const ui = studio(() => ambiguous
+    ? {...fit, reliable:false, reason:'Several timings fit this pattern.'}
+    : fit);
+  const n = ui.nodes;
+  await chooseSubtitle(ui, 'source');
+  await chooseSubtitle(ui, 'ref');
+  await n.run.click();
+  assert.equal(n.export.disabled, false);
+  ambiguous = true;
+  await n.run.click();
+  assert.equal(n.export.disabled, true);
+  assert.match(n.status.textContent, /Several timings/);
+  await n.export.click();
+  assert.equal(ui.download, undefined);
 });
