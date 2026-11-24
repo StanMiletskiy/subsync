@@ -33,6 +33,14 @@ ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"
 
 The example picks the first audio stream. Change `0:a:0` to `0:a:1` for the second. Select the soundtrack that matches the edition and watch for a delayed audio start when creating a standalone WAV. As another free browser option, [ffsubsync](https://ffsubsync.readthedocs.io/en/latest/browser.html) uses FFmpeg/WASM and WebRTC voice activity detection.
 
+## Translate a subtitle
+
+Open [Free AI Translation](https://perfectintegers.com/subsync/translate/) in desktop Google Chrome. Choose an SRT and its target language. The app processes the subtitle on the device and exports a new SRT with the original cue identifiers, timestamp strings, line breaks, speaker prefixes and formatting tags. Only dialogue and caption text is replaced. UTF-8 and UTF-16 files keep their encoding. Legacy inputs export as UTF-8 to represent the target language. Chrome may need to download its models or a language pack before the first translation.
+
+Cueframe checks the selected languages and the APIs available in the browser. Its embedded subtitle-editor prompt uses nearby dialogue to retain tone, names, certainty, and a speaker’s intent. When Chrome can run Gemini Nano, the page can use that context directly or alongside the dedicated Translator API. Standard local translation is available for supported pairs when the context model cannot run. A human subtitle editor can review ambiguous dialogue and wordplay before publication.
+
+For a manual compatibility review, check Google’s [Translator](https://developer.chrome.com/docs/ai/translator-api), [Language Detector](https://developer.chrome.com/docs/ai/language-detection), and [Prompt API](https://developer.chrome.com/docs/ai/prompt-api) documentation against a current desktop Chrome build. Check one prompted pair, one pair using a language pack, and an unsupported-browser state. The browser manages the installed models.
+
 ## Run, test and publish
 
 For offline use, choose **Download the offline HTML page** at the bottom of the live page, then open `cueframe.html` in your browser. All application code is included. For development, edit the readable source in `studio/` and run these commands from the repository root with Node 20 or later:
@@ -42,7 +50,7 @@ node --test studio-tests/*.test.cjs
 node studio/build.mjs
 ```
 
-The build generates `docs/index.html` and `docs/.nojekyll`. Commit the generated page alongside the source. Keep GitHub Pages disabled in this source repository. To publish an update, copy the generated `docs/index.html` to `subsync/index.html` on `main` in both `StanMiletskiy/perfectintegers-site` and `StanMiletskiy/perfectintegers-pages`. The latter serves [perfectintegers.com/subsync/](https://perfectintegers.com/subsync/).
+The build generates `docs/index.html`, `docs/translate/index.html`, and `docs/.nojekyll`. Commit both pages alongside the source. Keep GitHub Pages disabled in this source repository. Publish the two generated HTML files to `subsync/index.html` and `subsync/translate/index.html` in the same commit on `main` of each publishing repository, `StanMiletskiy/perfectintegers-site` and `StanMiletskiy/perfectintegers-pages`. The latter serves [Cueframe](https://perfectintegers.com/subsync/).
 
 ## Upstream review
 

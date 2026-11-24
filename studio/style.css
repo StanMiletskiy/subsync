@@ -118,3 +118,5 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 .flagged .section-jump{border-color:#b17949;color:#793c17}
 .section-jump[aria-pressed=true]{outline:2px solid currentColor;outline-offset:0}
 .section-cue{background:#edf4e5}
+
+.topbar .tool-link{color:var(--accent);font-size:.9rem;font-weight:600;text-decoration:underline;text-underline-offset:.2em}

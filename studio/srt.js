@@ -95,9 +95,11 @@
       const startAt = timing.at + tokens[1].length;
       const endAt = startAt + tokens[2].length + tokens[3].length;
       const last = block[block.length - 1];
+      const bodyEnd = last.at + last.line.length;
+      const bodyStart = body.length ? body[0].at : bodyEnd;
       cues.push({
         start, end,
-        text: body.length ? text.slice(body[0].at, last.at + last.line.length) : '',
+        text: text.slice(bodyStart, bodyEnd), bodyStart, bodyEnd,
         startAt, endAt, startToken: tokens[2], endToken: tokens[4],
       });
       block = [];
