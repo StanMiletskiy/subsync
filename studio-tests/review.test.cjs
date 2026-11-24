@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const SyncSrt = require('../studio/srt.js');
-const {mapTime} = require('../studio/align.js');
+const {align, mapTime} = require('../studio/align.js');
 
 // Exercise the normal controls and exported Blob without a browser dependency.
 class Element {
@@ -29,8 +29,9 @@ class Element {
   remove() {}
 }
 
-function studio(answer) {
+function studio(answer = align) {
   const html = fs.readFileSync(require.resolve('../studio/index.html'), 'utf8');
+  const app = fs.readFileSync(require.resolve('../studio/app.js'), 'utf8');
   const nodes = Object.fromEntries([...html.matchAll(/ id="([^"]+)"/g)].map(m => [m[1], new Element()]));
   const positions = ['first', 'middle', 'last'].map(position => {
     const button = new Element();
@@ -44,20 +45,74 @@ function studio(answer) {
     createDocumentFragment: () => new Element(),
     body: new Element(),
   };
-  const state = {nodes, positions};
+  const state = {nodes, positions, html, app, parsedFiles: 0};
   const context = vm.createContext({
-    document, SyncSrt, AbortController, Blob, Option: Element, setTimeout() {},
+    document, AbortController, Blob, Option: Element, setTimeout() {},
+    SyncSrt: {...SyncSrt, parse(text) { state.parsedFiles++; return SyncSrt.parse(text); }},
     URL: {
       createObjectURL(blob) { if (blob.type.startsWith('application/x-subrip')) state.download = blob; return 'blob:test'; },
       revokeObjectURL() {},
     },
-    SyncAlign: {mapTime, align(cues) { state.cues = cues; return answer(cues); }},
+    SyncAlign: {mapTime, align(cues, reference) { state.cues = cues; return answer(cues, reference); }},
   });
-  for (const filename of ['reference-cache.js', 'app.js']) {
-    vm.runInContext(fs.readFileSync(require.resolve('../studio/' + filename), 'utf8'), context);
-  }
+  vm.runInContext(fs.readFileSync(require.resolve('../studio/reference-cache.js'), 'utf8'), context);
+  vm.runInContext(app, context);
   return state;
 }
+
+async function chooseSubtitle(ui, slot) {
+  const reference = slot === 'ref';
+  let start = reference ? 4400 : 2000;
+  const blocks = Array.from({length: 55}, (_, i) => {
+    const end = start + 600 + (i * 137) % 1900;
+    const timing = SyncSrt.formatTime(start) + ' --> ' + SyncSrt.formatTime(end);
+    start = end + 400 + (i * i * 149) % 4100;
+    return [i + 1, timing, (reference ? 'Ligne ' : '字幕 ') + (i + 1)].join('\n');
+  });
+  const input = ui.nodes[slot + '-file'];
+  input.files = [new File([blocks.join('\n\n') + '\n'], slot + '.srt')];
+  await input.fire('change');
+  // The change handler starts an async file read. Wait for its UI completion.
+  const meta = ui.nodes[slot + '-meta'];
+  const deadline = Date.now() + 3000;
+  while (meta.textContent === 'Reading file…' && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.equal(meta.textContent, '55 cues · SRT');
+}
+
+test('startup contains no sample and enables preview and export as local files are loaded', async () => {
+  const ui = studio();
+  const n = ui.nodes;
+  assert.doesNotMatch(ui.html, /Load (?:the )?demo|Example timing|id="demo"/i);
+  assert.doesNotMatch(ui.app, /platform\.ar\.srt|platform\.reference\.fr\.srt|وصل القطار قبل الفجر|Le train est arrivé avant le jour/);
+  assert.equal(ui.parsedFiles, 0);
+  assert.equal(n['preview-empty'].hidden, false);
+  assert.equal(n['preview-content'].hidden, true);
+  assert.equal(n['preview-type'].hidden, true);
+  assert.equal(n['cue-list'].children.length, 0);
+  for (const id of ['estimate-title', 'estimate-info', 'range-time']) assert.equal(n[id].textContent || '', '');
+  assert.equal(n.run.disabled, true);
+  assert.equal(n.export.disabled, true);
+
+  await chooseSubtitle(ui, 'source');
+  assert.equal(n['preview-empty'].hidden, true);
+  assert.equal(n['preview-content'].hidden, false);
+  assert.equal(n['cue-list'].firstElementChild.firstElementChild.firstElementChild.textContent, '字幕 1');
+  assert.equal(n.run.disabled, true);
+  await chooseSubtitle(ui, 'ref');
+  assert.equal(ui.parsedFiles, 2);
+  assert.equal(n.run.disabled, false);
+  assert.equal(n.export.disabled, true);
+  await n.run.click();
+  assert.equal(n.export.disabled, false);
+  await n.export.click();
+  const exported = SyncSrt.parse(await ui.download.text()).cues;
+  assert.equal(exported.length, 55);
+  assert.equal(exported[0].text, '字幕 1');
+  assert.equal(exported[0].start, 4400);
+  assert.equal(exported.at(-1).start, ui.cues.at(-1).start + 2400);
+});
 
 const fit = {offsetMs:2400, scale:1, score:0.95, reliable:true};
 
@@ -65,7 +120,8 @@ test('ordinary matches keep the compact preview; a later correction reaches both
   let addEdit = false;
   const ui = studio(cues => ({...fit, edits:addEdit ? [{sourceMs:cues[40].start, deltaMs:8000}] : []}));
   const n = ui.nodes;
-  await n.demo.click();
+  await chooseSubtitle(ui, 'source');
+  await chooseSubtitle(ui, 'ref');
   await n.run.click();
   assert.equal(n['timing-sections'].hidden, true);
   assert.equal(n['estimate-title'].textContent, 'Offset +2.400 s');
@@ -98,7 +154,8 @@ test('flagged ranges disable export, jump to their own cues, and clear with a mo
     startMs:cues[i].start + 1, endMs:cues[i+1].end, reason:'No matching cue in this section.',
   }))}));
   const n = ui.nodes;
-  await n.demo.click();
+  await chooseSubtitle(ui, 'source');
+  await chooseSubtitle(ui, 'ref');
   await n.run.click();
   assert.equal(n.export.disabled, true);
   assert.equal(n['section-list'].children.length, 2);

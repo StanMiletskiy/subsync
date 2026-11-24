@@ -17,8 +17,7 @@
   </header>
   <main class="wrap">
     <div class="mast">
-      <div><h1>Subtitle sync</h1><p>Align an SRT with the right cut of a film. Keep every line in its original language.</p></div>
-      <button type="button" class="secondary demo-button" id="demo">Load demo</button>
+      <h1>Subtitle sync</h1><p>Align an SRT with the right rip of a film. Keep every line in correct order.</p>
     </div>
     <div class="desk">
       <section class="panel inputs" aria-labelledby="input-heading">
@@ -60,30 +59,33 @@
         <p class="status" id="status" role="status" aria-live="polite">Choose your subtitle and timing reference to begin.</p>
       </section>
       <section class="panel preview" aria-labelledby="preview-heading">
-        <div class="section-head"><h2 id="preview-heading">Timing preview</h2><span class="tag" id="preview-type">Example</span></div>
-        <div class="timeline">
-          <div class="timeline-top"><span>Timeline</span><span id="range-time">00:00:00 – 00:00:30</span></div>
-          <div class="lane"><span>Original</span><div class="lane-track" id="lane-original"></div></div>
-          <div class="lane"><span>Adjusted</span><div class="lane-track out-track" id="lane-adjusted"></div></div>
-          <div class="ruler" aria-hidden="true"><span id="ruler-start"></span><span id="ruler-mid"></span><span id="ruler-end"></span></div>
+        <div class="section-head"><h2 id="preview-heading">Timing preview</h2><span class="tag" id="preview-type" hidden></span></div>
+        <p class="hint" id="preview-empty">Choose a subtitle to preview its cues.</p>
+        <div id="preview-content" hidden>
+          <div class="timeline">
+            <div class="timeline-top"><span>Timeline</span><span id="range-time"></span></div>
+            <div class="lane"><span>Original</span><div class="lane-track" id="lane-original"></div></div>
+            <div class="lane"><span>Adjusted</span><div class="lane-track out-track" id="lane-adjusted"></div></div>
+            <div class="ruler" aria-hidden="true"><span id="ruler-start"></span><span id="ruler-mid"></span><span id="ruler-end"></span></div>
+          </div>
+          <details class="player" id="player-pane"><summary>Playback check</summary>
+            <label class="player-file">Choose a local movie or audio file<input type="file" id="play-file" accept="video/*,audio/*,.mkv,.m4v,.mov,.webm,.wav"></label>
+            <small id="player-note">Open a file to check the adjusted cues against the soundtrack.</small>
+            <div id="player-stage" hidden><video id="player" controls playsinline preload="metadata"></video><p id="player-line" dir="auto"></p></div>
+            <button type="button" class="text-button" id="capture" hidden>Use player time for film anchor</button>
+          </details>
+          <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
+            <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
+          </div></div>
+          <section class="timing-sections" id="timing-sections" aria-labelledby="sections-heading" hidden>
+            <h4 id="sections-heading">Timing changes</h4>
+            <ul id="section-list"></ul>
+          </section>
+          <div class="table-wrap">
+            <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
+          </div>
+          <div class="export-bar"><div><p id="estimate-title"></p><small id="estimate-info"></small></div><button type="button" class="export" id="export" disabled>Export SRT</button></div>
         </div>
-        <details class="player" id="player-pane"><summary>Playback check</summary>
-          <label class="player-file">Choose a local movie or audio file<input type="file" id="play-file" accept="video/*,audio/*,.mkv,.m4v,.mov,.webm,.wav"></label>
-          <small id="player-note">Open a file to check the adjusted cues against the soundtrack.</small>
-          <div id="player-stage" hidden><video id="player" controls playsinline preload="metadata"></video><p id="player-line" dir="auto"></p></div>
-          <button type="button" class="text-button" id="capture" hidden>Use player time for film anchor</button>
-        </details>
-        <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
-          <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
-        </div></div>
-        <section class="timing-sections" id="timing-sections" aria-labelledby="sections-heading" hidden>
-          <h4 id="sections-heading">Timing changes</h4>
-          <ul id="section-list"></ul>
-        </section>
-        <div class="table-wrap">
-          <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
-        </div>
-        <div class="export-bar"><div><p id="estimate-title">Example timing</p><small id="estimate-info">Load the demo to try these files.</small></div><button type="button" class="export" id="export" disabled>Export SRT</button></div>
       </section>
     </div>
     <details class="help"><summary>Working with a movie or a different cut?</summary>

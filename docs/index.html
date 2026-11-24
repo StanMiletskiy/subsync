@@ -25,13 +25,12 @@ button:disabled{opacity:.55}
 .brand-icon i:first-child{width:13px}
 .brand-icon i:last-child{width:10px;justify-self:end}
 .local-label{font-size:.85rem;color:#ccdad2;letter-spacing:.02em}
-.mast{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:40px 0 28px}
+.mast{margin:40px 0 28px}
 h1,h2,h3,p{margin:0}
 h1{font-size:clamp(2.5rem,5.5vw,4.25rem);font-weight:640;letter-spacing:-.082em;line-height:1.03}
 .mast p{color:var(--muted);margin-top:11px;max-width:640px}
-button.secondary,.export,.primary{border-radius:8px;padding:.82rem 1.18rem;font-size:.94rem;border:1px solid var(--line);white-space:nowrap}
-.secondary{color:var(--ink);background:var(--white)}
-.secondary:hover,.positions button:hover,.text-button:hover{text-decoration:underline;text-underline-offset:3px}
+.export,.primary{border-radius:8px;padding:.82rem 1.18rem;font-size:.94rem;border:1px solid var(--line);white-space:nowrap}
+.positions button:hover,.text-button:hover{text-decoration:underline;text-underline-offset:3px}
 .desk{display:grid;grid-template-columns:minmax(300px,.83fr) minmax(0,1.57fr);align-items:start;gap:20px}
 .panel{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:24px;min-width:0}
 h2{font-size:1.45rem;line-height:1.3;letter-spacing:-.045em;font-weight:680}
@@ -106,7 +105,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 @media(min-width:1450px){.mast{margin-top:50px}}
 @media(max-width:950px){.wrap{width:calc(100% - 40px)}.desk{gap:13px;grid-template-columns:minmax(260px,.83fr) minmax(0,1.4fr)}.panel{padding:17px}.positions button{padding:5px 6px}td.time{font-size:.72rem}}
 @media(max-width:740px){.desk{grid-template-columns:1fr}.mast{margin:25px 0 20px}.mast p{font-size:.95rem}.bar-inner{min-height:56px}.inputs .status{min-height:0}.timeline{padding:14px}.desk{gap:14px}.review-head{margin-top:18px}td.time{font-size:.77rem}.wrap{width:calc(100% - 30px)}}
-@media(max-width:420px){.mast{align-items:start;flex-direction:column;gap:12px}.panel{padding:14px}.file-block{margin-top:16px}.review-head,.export-bar{align-items:flex-start;flex-wrap:wrap}th,td{padding:8px 4px}th{font-size:.69rem}td.time{font-size:.68rem}.lane{grid-template-columns:53px 1fr}.ruler{margin-left:61px}footer{flex-wrap:wrap}}
+@media(max-width:420px){.panel{padding:14px}.file-block{margin-top:16px}.review-head,.export-bar{align-items:flex-start;flex-wrap:wrap}th,td{padding:8px 4px}th{font-size:.69rem}td.time{font-size:.68rem}.lane{grid-template-columns:53px 1fr}.ruler{margin-left:61px}footer{flex-wrap:wrap}}
 .track-box{margin-top:9px}
 .track-box label{display:block;color:var(--muted);font-size:.85rem;margin-bottom:4px}
 .track-box select{width:100%;font-size:.9rem}
@@ -140,8 +139,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
   </header>
   <main class="wrap">
     <div class="mast">
-      <div><h1>Subtitle sync</h1><p>Align an SRT with the right cut of a film. Keep every line in its original language.</p></div>
-      <button type="button" class="secondary demo-button" id="demo">Load demo</button>
+      <h1>Subtitle sync</h1><p>Align an SRT with the right rip of a film. Keep every line in correct order.</p>
     </div>
     <div class="desk">
       <section class="panel inputs" aria-labelledby="input-heading">
@@ -183,30 +181,33 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         <p class="status" id="status" role="status" aria-live="polite">Choose your subtitle and timing reference to begin.</p>
       </section>
       <section class="panel preview" aria-labelledby="preview-heading">
-        <div class="section-head"><h2 id="preview-heading">Timing preview</h2><span class="tag" id="preview-type">Example</span></div>
-        <div class="timeline">
-          <div class="timeline-top"><span>Timeline</span><span id="range-time">00:00:00 – 00:00:30</span></div>
-          <div class="lane"><span>Original</span><div class="lane-track" id="lane-original"></div></div>
-          <div class="lane"><span>Adjusted</span><div class="lane-track out-track" id="lane-adjusted"></div></div>
-          <div class="ruler" aria-hidden="true"><span id="ruler-start"></span><span id="ruler-mid"></span><span id="ruler-end"></span></div>
+        <div class="section-head"><h2 id="preview-heading">Timing preview</h2><span class="tag" id="preview-type" hidden></span></div>
+        <p class="hint" id="preview-empty">Choose a subtitle to preview its cues.</p>
+        <div id="preview-content" hidden>
+          <div class="timeline">
+            <div class="timeline-top"><span>Timeline</span><span id="range-time"></span></div>
+            <div class="lane"><span>Original</span><div class="lane-track" id="lane-original"></div></div>
+            <div class="lane"><span>Adjusted</span><div class="lane-track out-track" id="lane-adjusted"></div></div>
+            <div class="ruler" aria-hidden="true"><span id="ruler-start"></span><span id="ruler-mid"></span><span id="ruler-end"></span></div>
+          </div>
+          <details class="player" id="player-pane"><summary>Playback check</summary>
+            <label class="player-file">Choose a local movie or audio file<input type="file" id="play-file" accept="video/*,audio/*,.mkv,.m4v,.mov,.webm,.wav"></label>
+            <small id="player-note">Open a file to check the adjusted cues against the soundtrack.</small>
+            <div id="player-stage" hidden><video id="player" controls playsinline preload="metadata"></video><p id="player-line" dir="auto"></p></div>
+            <button type="button" class="text-button" id="capture" hidden>Use player time for film anchor</button>
+          </details>
+          <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
+            <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
+          </div></div>
+          <section class="timing-sections" id="timing-sections" aria-labelledby="sections-heading" hidden>
+            <h4 id="sections-heading">Timing changes</h4>
+            <ul id="section-list"></ul>
+          </section>
+          <div class="table-wrap">
+            <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
+          </div>
+          <div class="export-bar"><div><p id="estimate-title"></p><small id="estimate-info"></small></div><button type="button" class="export" id="export" disabled>Export SRT</button></div>
         </div>
-        <details class="player" id="player-pane"><summary>Playback check</summary>
-          <label class="player-file">Choose a local movie or audio file<input type="file" id="play-file" accept="video/*,audio/*,.mkv,.m4v,.mov,.webm,.wav"></label>
-          <small id="player-note">Open a file to check the adjusted cues against the soundtrack.</small>
-          <div id="player-stage" hidden><video id="player" controls playsinline preload="metadata"></video><p id="player-line" dir="auto"></p></div>
-          <button type="button" class="text-button" id="capture" hidden>Use player time for film anchor</button>
-        </details>
-        <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
-          <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
-        </div></div>
-        <section class="timing-sections" id="timing-sections" aria-labelledby="sections-heading" hidden>
-          <h4 id="sections-heading">Timing changes</h4>
-          <ul id="section-list"></ul>
-        </section>
-        <div class="table-wrap">
-          <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
-        </div>
-        <div class="export-bar"><div><p id="estimate-title">Example timing</p><small id="estimate-info">Load the demo to try these files.</small></div><button type="button" class="export" id="export" disabled>Export SRT</button></div>
       </section>
     </div>
     <details class="help"><summary>Working with a movie or a different cut?</summary>
@@ -214,7 +215,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       <pre><code>ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"</code></pre>
       <p>Automatic alignment compares dialogue timing across the film. When the timing changes partway through, the preview shows where a correction was applied or where the match needs review. Choose a section to inspect the surrounding cues. For an uncertain cut between cues, use four manual pairs. Pick one early in the film, one just before the cut, one just after it, and one near the end. Lines missing from the release need editing separately.</p>
     </details>
-    <p><a href="./index.html" download="cueframe.html">Download the offline app</a></p><details class="help"><summary>Source and license</summary><p>Cueframe is a browser rewrite in a fork of Michał Szymaniak’s SubSync. Distributed under the GNU General Public License, version 3 or later. <a href="https://github.com/StanMiletskiy/subsync">View source and tests on GitHub</a>.</p><details><summary>Read GNU GPL v3</summary><pre style="white-space:pre-wrap;max-height:18rem;overflow:auto">                    GNU GENERAL PUBLIC LICENSE
+    <p><a href="./index.html" download="cueframe.html">Download the offline HTML page</a></p><details class="help"><summary>Source and license</summary><p>Cueframe is a browser rewrite in a fork of Michał Szymaniak’s SubSync. Distributed under the GNU General Public License, version 3 or later. <a href="https://github.com/StanMiletskiy/subsync">View source and tests on GitHub</a>.</p><details><summary>Read GNU GPL v3</summary><pre style="white-space:pre-wrap;max-height:18rem;overflow:auto">                    GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. &lt;https://fsf.org/&gt;
@@ -3017,7 +3018,6 @@ Public License instead of this License.  But first, please read
   let position = 'first';
   let running = null;
   let result = null;
-  let demoSession = false;
   let mediaUrl = null;
   let mediaName = '';
   let reviewMedia = null;
@@ -3044,23 +3044,6 @@ Public License instead of this License.  But first, please read
   for (const slot of ['source','ref']) {
     for (const [value,label] of encodings) byId(slot+'-encoding').add(new Option(label,value));
   }
-
-  function makeExample() {
-    const ar = ['وصل القطار قبل الفجر.', 'هل أحضرت الخريطة؟', 'أظن أن الطريق من هنا.', 'لننتظر حتى تضيء النافذة.', 'تركت لك رسالة على الطاولة.', 'أسمع خطوات في الممر.'];
-    const fr = ['Le train est arrivé avant le jour.', 'Tu as apporté la carte ?', 'Je crois que c’est par ici.', 'Attendons que la fenêtre s’éclaire.', 'Je t’ai laissé un mot sur la table.', 'J’entends des pas dans le couloir.'];
-    let random = 91573, time = 1800;
-    const draw = () => {random = (Math.imul(random,1664525) + 1013904223) >>> 0; return random / 4294967296;};
-    const source = [], ref = [];
-    for (let index=0; index<56; index++) {
-      const end = time + Math.round(900 + draw()*3000);
-      const makeCue = (shift, line) => [index+1, SyncSrt.formatTime(time+shift)+' --> '+SyncSrt.formatTime(end+shift),line].join('\n');
-      source.push(makeCue(0, ar[index%ar.length]));
-      ref.push(makeCue(2400, fr[index%fr.length]));
-      time = end + Math.round(300 + draw()*draw()*11000);
-    }
-    return {source:SyncSrt.parse(source.join('\n\n')+'\n'), ref:SyncSrt.parse(ref.join('\n\n')+'\n')};
-  }
-  const example = makeExample();
 
   function message(text, kind='') {
     byId('status').textContent = text;
@@ -3145,8 +3128,6 @@ Public License instead of this License.  But first, please read
   }
   async function choose(slot, file) {
     if (!file) return;
-    // Switching from the example to real footage always starts a fresh session.
-    if (demoSession) resetFiles();
     const ticket = ++readId[slot];
     readAbort[slot]?.abort();
     const controller = new AbortController();
@@ -3155,7 +3136,7 @@ Public License instead of this License.  But first, please read
     const record = {file,kind,name:file.name};
     if (slot==='ref') referenceCache.clear();
     tracks[slot] = record;
-    if (slot==='source') selectPosition('first');
+    if (slot==='source') position='first';
     invalidate();
     const meta = byId(slot+'-meta');
     byId(slot+'-name').textContent = file.name;
@@ -3193,46 +3174,6 @@ Public License instead of this License.  But first, please read
       guide();
       preview();
     }
-  }
-  function resetFiles() {
-    referenceCache.clear();
-    demoSession = false;
-    setMedia(null);
-    focusedPair = null;
-    for (const slot of ['source','ref']) {
-      readAbort[slot]?.abort();
-      ++readId[slot];
-      tracks[slot] = null;
-      byId(slot+'-file').value = '';
-      byId(slot+'-encoding').value = 'auto';
-      byId(slot+'-encoding-box').open = false;
-      byId(slot+'-encoding-box').hidden = false;
-    }
-    byId('source-name').textContent='Choose subtitle';
-    byId('source-meta').textContent='Drop an SRT file here';
-    byId('ref-name').textContent='Choose reference';
-    byId('ref-meta').textContent='Drop a timed SRT, movie or WAV';
-    byId('track-box').hidden=true;
-    byId('anchor-rows').replaceChildren();
-    addAnchor();
-  }
-  function loadDemo() {
-    stop();
-    resetFiles();
-    demoSession = true;
-    for (const slot of ['source','ref']) {
-      const name = slot==='source'?'platform.ar.srt':'platform.reference.fr.srt';
-      tracks[slot]={kind:'srt',name,parsed:example[slot]};
-      byId(slot+'-name').textContent=name;
-      byId(slot+'-meta').textContent=example[slot].cues.length+' cues · example SRT';
-      byId(slot+'-encoding-box').hidden=true;
-    }
-    const row = byId('anchor-rows').firstElementChild;
-    row.children[0].value = SyncSrt.formatTime(example.source.cues[0].start);
-    row.children[1].value = SyncSrt.formatTime(example.ref.cues[0].start);
-    setMode('automatic');
-    selectPosition('first');
-    message('Example loaded. Find timing to align Arabic subtitles with their French reference.');
   }
   function addAnchor() {
     const row = document.createElement('div');
@@ -3432,10 +3373,19 @@ Public License instead of this License.  But first, please read
     }
   }
   function preview() {
-    const sample=!tracks.source?.parsed;
-    const cues=sample?example.source.cues:tracks.source.parsed.cues;
-    const map=sample?(time=>time+2400):result?.map;
-    byId('preview-type').textContent=sample?'Example':demoSession?'Demo files':!result?'Original':result.exportable?'Adjusted':'Low confidence';
+    const cues=tracks.source?.parsed?.cues;
+    const hasCues=!!cues?.length;
+    byId('preview-empty').hidden=hasCues;
+    byId('preview-content').hidden=!hasCues;
+    byId('preview-type').hidden=!hasCues;
+    if (!hasCues) {
+      for (const id of ['lane-original','lane-adjusted','cue-list']) byId(id).replaceChildren();
+      for (const id of ['range-time','ruler-start','ruler-mid','ruler-end','preview-type','estimate-title','estimate-info']) byId(id).textContent='';
+      refreshPlayer(null,identityTime);
+      return;
+    }
+    const map=result?.map;
+    byId('preview-type').textContent=!result?'Original':result.exportable?'Adjusted':'Low confidence';
     for (const button of document.querySelectorAll('[data-position]')) {
       button.setAttribute('aria-pressed', String(button.dataset.position===position));
     }
@@ -3443,8 +3393,8 @@ Public License instead of this License.  But first, please read
     const offset=section?Math.max(0,Math.min(cues.length-3,section.index-1)):
       position==='last'?Math.max(0,cues.length-3):position==='middle'?Math.max(0,Math.floor((cues.length-3)/2)):0;
     const selected=cues.slice(offset,offset+3);
-    const start=selected[0]?.start ?? 0;
-    const end=selected[selected.length-1]?.end ?? start+30000;
+    const start=selected[0].start;
+    const end=selected[selected.length-1].end;
     const left=Math.max(0,Math.floor((Math.min(start,map?map(start):start)-2000)/1000)*1000);
     const right=Math.max(left+30000,Math.ceil((Math.max(end,map?map(end):end)+2000)/1000)*1000);
     byId('range-time').textContent=prettyTime(left,true)+' – '+prettyTime(right,true);
@@ -3457,7 +3407,7 @@ Public License instead of this License.  But first, please read
       if (section && cue===cues[section.index]) row.className='section-cue';
       const line=document.createElement('td'), isolated=document.createElement('bdi');
       isolated.dir='auto'; isolated.textContent=cue.text;
-      if (mediaReady && !sample) {
+      if (mediaReady) {
         const jump=document.createElement('button');
         jump.type='button'; jump.className='play-cue'; jump.textContent='Play';
         jump.setAttribute('aria-label','Play cue at '+prettyTime(map?map(cue.start):cue.start));
@@ -3470,9 +3420,9 @@ Public License instead of this License.  But first, please read
       }
       body.append(row);
     }
-    refreshPlayer(sample?null:cues,map || identityTime);
-    byId('estimate-title').textContent=sample?'Example timing':result?.title || 'Awaiting adjustment';
-    byId('estimate-info').textContent=sample?'Load the demo to try these files.':result?.detail || 'Adjusted timestamps will appear here.';
+    refreshPlayer(cues,map || identityTime);
+    byId('estimate-title').textContent=result?.title || 'Awaiting adjustment';
+    byId('estimate-info').textContent=result?.detail || 'Adjusted timestamps will appear here.';
   }
   function setMedia(file, separate=false) {
     if (file===reviewMedia && separate===attachedSeparately) return;
@@ -3588,7 +3538,6 @@ Public License instead of this License.  But first, please read
     const input=row.children[1]; input.value=prettyTime(byId('player').currentTime*1000);
     invalidate(); guide(); input.focus();
   });
-  byId('demo').addEventListener('click',loadDemo);
   byId('automatic').addEventListener('click',()=>setMode('automatic'));
   byId('manual').addEventListener('click',()=>setMode('manual'));
   byId('add-anchor').addEventListener('click',()=>{addAnchor().firstElementChild.focus(); invalidate(); guide();});

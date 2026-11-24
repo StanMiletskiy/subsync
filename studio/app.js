@@ -29,7 +29,6 @@
   let position = 'first';
   let running = null;
   let result = null;
-  let demoSession = false;
   let mediaUrl = null;
   let mediaName = '';
   let reviewMedia = null;
@@ -56,23 +55,6 @@
   for (const slot of ['source','ref']) {
     for (const [value,label] of encodings) byId(slot+'-encoding').add(new Option(label,value));
   }
-
-  function makeExample() {
-    const ar = ['وصل القطار قبل الفجر.', 'هل أحضرت الخريطة؟', 'أظن أن الطريق من هنا.', 'لننتظر حتى تضيء النافذة.', 'تركت لك رسالة على الطاولة.', 'أسمع خطوات في الممر.'];
-    const fr = ['Le train est arrivé avant le jour.', 'Tu as apporté la carte ?', 'Je crois que c’est par ici.', 'Attendons que la fenêtre s’éclaire.', 'Je t’ai laissé un mot sur la table.', 'J’entends des pas dans le couloir.'];
-    let random = 91573, time = 1800;
-    const draw = () => {random = (Math.imul(random,1664525) + 1013904223) >>> 0; return random / 4294967296;};
-    const source = [], ref = [];
-    for (let index=0; index<56; index++) {
-      const end = time + Math.round(900 + draw()*3000);
-      const makeCue = (shift, line) => [index+1, SyncSrt.formatTime(time+shift)+' --> '+SyncSrt.formatTime(end+shift),line].join('\n');
-      source.push(makeCue(0, ar[index%ar.length]));
-      ref.push(makeCue(2400, fr[index%fr.length]));
-      time = end + Math.round(300 + draw()*draw()*11000);
-    }
-    return {source:SyncSrt.parse(source.join('\n\n')+'\n'), ref:SyncSrt.parse(ref.join('\n\n')+'\n')};
-  }
-  const example = makeExample();
 
   function message(text, kind='') {
     byId('status').textContent = text;
@@ -157,8 +139,6 @@
   }
   async function choose(slot, file) {
     if (!file) return;
-    // Switching from the example to real footage always starts a fresh session.
-    if (demoSession) resetFiles();
     const ticket = ++readId[slot];
     readAbort[slot]?.abort();
     const controller = new AbortController();
@@ -167,7 +147,7 @@
     const record = {file,kind,name:file.name};
     if (slot==='ref') referenceCache.clear();
     tracks[slot] = record;
-    if (slot==='source') selectPosition('first');
+    if (slot==='source') position='first';
     invalidate();
     const meta = byId(slot+'-meta');
     byId(slot+'-name').textContent = file.name;
@@ -205,46 +185,6 @@
       guide();
       preview();
     }
-  }
-  function resetFiles() {
-    referenceCache.clear();
-    demoSession = false;
-    setMedia(null);
-    focusedPair = null;
-    for (const slot of ['source','ref']) {
-      readAbort[slot]?.abort();
-      ++readId[slot];
-      tracks[slot] = null;
-      byId(slot+'-file').value = '';
-      byId(slot+'-encoding').value = 'auto';
-      byId(slot+'-encoding-box').open = false;
-      byId(slot+'-encoding-box').hidden = false;
-    }
-    byId('source-name').textContent='Choose subtitle';
-    byId('source-meta').textContent='Drop an SRT file here';
-    byId('ref-name').textContent='Choose reference';
-    byId('ref-meta').textContent='Drop a timed SRT, movie or WAV';
-    byId('track-box').hidden=true;
-    byId('anchor-rows').replaceChildren();
-    addAnchor();
-  }
-  function loadDemo() {
-    stop();
-    resetFiles();
-    demoSession = true;
-    for (const slot of ['source','ref']) {
-      const name = slot==='source'?'platform.ar.srt':'platform.reference.fr.srt';
-      tracks[slot]={kind:'srt',name,parsed:example[slot]};
-      byId(slot+'-name').textContent=name;
-      byId(slot+'-meta').textContent=example[slot].cues.length+' cues · example SRT';
-      byId(slot+'-encoding-box').hidden=true;
-    }
-    const row = byId('anchor-rows').firstElementChild;
-    row.children[0].value = SyncSrt.formatTime(example.source.cues[0].start);
-    row.children[1].value = SyncSrt.formatTime(example.ref.cues[0].start);
-    setMode('automatic');
-    selectPosition('first');
-    message('Example loaded. Find timing to align Arabic subtitles with their French reference.');
   }
   function addAnchor() {
     const row = document.createElement('div');
@@ -444,10 +384,19 @@
     }
   }
   function preview() {
-    const sample=!tracks.source?.parsed;
-    const cues=sample?example.source.cues:tracks.source.parsed.cues;
-    const map=sample?(time=>time+2400):result?.map;
-    byId('preview-type').textContent=sample?'Example':demoSession?'Demo files':!result?'Original':result.exportable?'Adjusted':'Low confidence';
+    const cues=tracks.source?.parsed?.cues;
+    const hasCues=!!cues?.length;
+    byId('preview-empty').hidden=hasCues;
+    byId('preview-content').hidden=!hasCues;
+    byId('preview-type').hidden=!hasCues;
+    if (!hasCues) {
+      for (const id of ['lane-original','lane-adjusted','cue-list']) byId(id).replaceChildren();
+      for (const id of ['range-time','ruler-start','ruler-mid','ruler-end','preview-type','estimate-title','estimate-info']) byId(id).textContent='';
+      refreshPlayer(null,identityTime);
+      return;
+    }
+    const map=result?.map;
+    byId('preview-type').textContent=!result?'Original':result.exportable?'Adjusted':'Low confidence';
     for (const button of document.querySelectorAll('[data-position]')) {
       button.setAttribute('aria-pressed', String(button.dataset.position===position));
     }
@@ -455,8 +404,8 @@
     const offset=section?Math.max(0,Math.min(cues.length-3,section.index-1)):
       position==='last'?Math.max(0,cues.length-3):position==='middle'?Math.max(0,Math.floor((cues.length-3)/2)):0;
     const selected=cues.slice(offset,offset+3);
-    const start=selected[0]?.start ?? 0;
-    const end=selected[selected.length-1]?.end ?? start+30000;
+    const start=selected[0].start;
+    const end=selected[selected.length-1].end;
     const left=Math.max(0,Math.floor((Math.min(start,map?map(start):start)-2000)/1000)*1000);
     const right=Math.max(left+30000,Math.ceil((Math.max(end,map?map(end):end)+2000)/1000)*1000);
     byId('range-time').textContent=prettyTime(left,true)+' – '+prettyTime(right,true);
@@ -469,7 +418,7 @@
       if (section && cue===cues[section.index]) row.className='section-cue';
       const line=document.createElement('td'), isolated=document.createElement('bdi');
       isolated.dir='auto'; isolated.textContent=cue.text;
-      if (mediaReady && !sample) {
+      if (mediaReady) {
         const jump=document.createElement('button');
         jump.type='button'; jump.className='play-cue'; jump.textContent='Play';
         jump.setAttribute('aria-label','Play cue at '+prettyTime(map?map(cue.start):cue.start));
@@ -482,9 +431,9 @@
       }
       body.append(row);
     }
-    refreshPlayer(sample?null:cues,map || identityTime);
-    byId('estimate-title').textContent=sample?'Example timing':result?.title || 'Awaiting adjustment';
-    byId('estimate-info').textContent=sample?'Load the demo to try these files.':result?.detail || 'Adjusted timestamps will appear here.';
+    refreshPlayer(cues,map || identityTime);
+    byId('estimate-title').textContent=result?.title || 'Awaiting adjustment';
+    byId('estimate-info').textContent=result?.detail || 'Adjusted timestamps will appear here.';
   }
   function setMedia(file, separate=false) {
     if (file===reviewMedia && separate===attachedSeparately) return;
@@ -600,7 +549,6 @@
     const input=row.children[1]; input.value=prettyTime(byId('player').currentTime*1000);
     invalidate(); guide(); input.focus();
   });
-  byId('demo').addEventListener('click',loadDemo);
   byId('automatic').addEventListener('click',()=>setMode('automatic'));
   byId('manual').addEventListener('click',()=>setMode('manual'));
   byId('add-anchor').addEventListener('click',()=>{addAnchor().firstElementChild.focus(); invalidate(); guide();});

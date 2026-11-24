@@ -6,7 +6,7 @@ Retiming an SRT changes when lines appear. Cueframe keeps the language, dialogue
 
 ## Sync a subtitle
 
-1. Open the app in a current desktop browser. Chrome is a good first choice for movie audio. Use **Load demo** to try a cross-language example.
+1. Open the app in a current desktop browser. Chrome is a good first choice for movie audio.
 2. Choose the **Subtitle to retime**. For **Timing reference**, choose an SRT that already plays correctly with your release. You can also select a movie with a supported embedded subtitle or audio track, or a PCM WAV. For a movie, pick the full dialogue track in the track list. Forced-only, commentary and descriptive audio tracks can have very different timing.
 3. Select **Find timing**. Check the proposed shift and inspect lines at the start, middle and end against the film. Export the corrected SRT and open it in your usual player. For media your browser can play, the optional preview lets you jump to a cue and capture times for manual anchors. The original file stays intact.
 
@@ -35,7 +35,7 @@ The example picks the first audio stream. Change `0:a:0` to `0:a:1` for the seco
 
 ## Run, test and publish
 
-For offline use, choose **Download the offline app** at the bottom of the live page, then open `cueframe.html` in your browser. All application code is included. For development, edit the readable source in `studio/` and run these commands from the repository root with Node 20 or later:
+For offline use, choose **Download the offline HTML page** at the bottom of the live page, then open `cueframe.html` in your browser. All application code is included. For development, edit the readable source in `studio/` and run these commands from the repository root with Node 20 or later:
 
 ```sh
 node --test studio-tests/*.test.cjs
