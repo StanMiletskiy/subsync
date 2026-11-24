@@ -91,7 +91,7 @@
     <details class="help"><summary>Working with a movie or a different cut?</summary>
       <p>Choose a timed SRT, an embedded text track in an MKV or MP4 movie, or a soundtrack your browser can decode. For other audio formats, extract the dialogue track as a mono WAV. With FFmpeg installed, this command selects the first audio track. Choose the audio track that matches your film.</p>
       <pre><code>ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"</code></pre>
-      <p>Cueframe automatically matches shared dialogue between subtitle files. For different translations or a soundtrack, it compares the timing of speech and pauses. Select Export SRT to save the correction. If the reference is too different to align, try a subtitle or dialogue track from the release you want to match.</p>
+      <p>Cueframe automatically matches shared dialogue between subtitle files. For different translations, it uses the rhythm of nearby cues to match their starts and ends. A soundtrack is matched using speech and pauses. Select Export SRT to save the correction. If the reference is too different to align, try a subtitle or dialogue track from the release you want to match.</p>
     </details>
     <footer><span>Cueframe</span><span>Subtitle and audio files stay on this device.</span></footer>
   </main>

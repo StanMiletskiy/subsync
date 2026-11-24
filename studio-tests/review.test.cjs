@@ -178,6 +178,23 @@ test('a supported automatic match with a local mismatch exports all cues without
   }
 });
 
+test('reports verified cue timing matches and reserves 100% for an exact timeline', async () => {
+  let result = {...fit, score:0.9974, matchedTimings:52, exactTimings:false};
+  const ui = studio(() => result);
+  await chooseSubtitle(ui, 'source');
+  await chooseSubtitle(ui, 'ref');
+  await ui.nodes.run.click();
+  assert.equal(ui.nodes['estimate-title'].textContent, 'Matched subtitle timings');
+  assert.match(ui.nodes['estimate-info'].textContent, /99\.7% · 52 of 55 cues matched by timing/);
+  assert.equal(ui.nodes.export.disabled, false);
+  result = {...fit, score:0.9998};
+  await ui.nodes.run.click();
+  assert.match(ui.nodes['estimate-info'].textContent, />99\.9%/);
+  result = {...fit, score:1, matchedTimings:55, exactTimings:true};
+  await ui.nodes.run.click();
+  assert.match(ui.nodes['estimate-info'].textContent, /100% · 55 of 55 cues matched by timing/);
+});
+
 test('unsupported ranges disable export, jump to their own cues, and clear with a mode change', async () => {
   const ui = studio(cues => ({...fit, reliable:false, reason:'No supported timing map.', reviewRanges:[14, 45].map(i => ({
     startMs:cues[i].start + 1, endMs:cues[i+1].end, reason:'No matching cue in this section.',

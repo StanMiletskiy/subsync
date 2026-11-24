@@ -294,11 +294,16 @@
         const drift=((answer.scale-1)*100);
         const sign=drift>=0?'+':'−';
         title=(edits.length?'Starting offset ':'Offset ')+signedSeconds(answer.offsetMs);
-        detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · timing match score '+Math.round(answer.score*100)+'%';
-        if (answer.dialoguePoints) {
-          title='Matched subtitle dialogue';
-          const percent=!answer.exactTimings && answer.score>=0.9995?'>99.9':(answer.score*100).toFixed(1);
-          detail='Timing match score '+percent+'% · '+answer.matchedLines.toLocaleString()+' of '+parsed.cues.length.toLocaleString()+' cues matched by text';
+        const paired = answer.matchedTimings || answer.matchedLines;
+        const precision = (paired || answer.score >= 0.995) ? 1 : 0;
+        let percent = (answer.score * 100).toFixed(precision);
+        if (answer.exactTimings) percent = '100';
+        else if (answer.score >= 0.9995) percent = '>99.9';
+        detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · timing match score '+percent+'%';
+        if (paired) {
+          title=answer.matchedTimings?'Matched subtitle timings':'Matched subtitle dialogue';
+          const method=answer.matchedTimings?'timing':'text';
+          detail='Timing match score '+percent+'% · '+paired.toLocaleString()+' of '+parsed.cues.length.toLocaleString()+' cues matched by '+method;
         }
         if (!exportable) message(answer.reason || 'Weak timing match. Try a reference from the same release.','error');
       }

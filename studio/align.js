@@ -317,6 +317,13 @@
 
   function mapTime(fit, ms) {
     if (fit.dialoguePoints) return mapDialogue(fit.dialoguePoints, ms);
+    const timing = fit.timingPoints;
+    if (timing) {
+      const first = timing[0], last = timing.at(-1);
+      if (ms < first[0]) return first[1] + (ms - first[0]) * fit.scale;
+      if (ms > last[0]) return last[1] + (ms - last[0]) * fit.scale;
+      return mapDialogue(timing, ms);
+    }
     let time = ms * fit.scale + fit.offsetMs;
     for (const edit of fit.edits || []) {
       if (ms < edit.sourceMs) break;
@@ -949,18 +956,147 @@
     if (mapped.some(c => c.start < 0 || c.end <= c.start)) return null;
     // Measure the exported timeline, including inferred cues and reference-only
     // material. Text correspondence selects the mapping, never its score.
-    const mappedBounds = extent(mapped), refBounds = extent(refs);
-    const bounds = [Math.min(mappedBounds[0], refBounds[0]), Math.max(mappedBounds[1], refBounds[1])];
-    const actual = cueActivity(mapped, step, bounds), expected = cueActivity(refs, step, bounds);
-    const agreement = evaluate(actual, expected, step, {scale: 1, offset: 0}, 1, segments);
-    const exact = mapped.length === refs.length && mapped.every((cue, i) =>
-      cue.start === refs[i].start && cue.end === refs[i].end);
+    const {agreement,exact} = measuredTimeline(mapped, refs, step, segments);
     if (!exact && (agreement.segments !== segments || agreement.weakest < 0.65 || agreement.r < 0.8)) return null;
     const first = points[0], last = points.at(-1);
     const scale = (last[1] - first[1]) / (last[0] - first[0]);
     return {dialoguePoints: points, matchedLines: pairs.length, scale,
       offsetMs: Math.round(first[1] - scale * first[0]), score: exact ? 1 : clamp(agreement.r, 0, 1), exactTimings: exact,
       reliable: true, edits: [], reviewRanges: []};
+  }
+
+  // Anchors must occupy the same projected interval in both directions. Count
+  // substantial overlaps even when the candidate itself would fail the duration
+  // check; these can be split cues, merged cues or an overlay.
+  function timingCorrespondence(source, reference) {
+    const starts = reference.map(c => c.start), owners = new Uint32Array(reference.length);
+    let latest = -Infinity;
+    const endsThrough = reference.map(c => (latest = Math.max(latest, c.end)));
+    const blocked = cues => {
+      let previousEnd = -Infinity;
+      return cues.map((c, i) => {
+        const overlap = c.start < previousEnd || c.end > (cues[i+1]?.start ?? Infinity);
+        previousEnd = Math.max(previousEnd, c.end);
+        return overlap;
+      });
+    };
+    const blockedSource = blocked(source), blockedRef = blocked(reference);
+    const pairs = source.map((a, i) => {
+      const lo = lowerBound(endsThrough, a.start), hi = lowerBound(starts, a.end);
+      if (blockedSource[i] || hi - lo > 32) return -1;
+      let best = -1, bestScore = 0, runner = 0, overlaps = 0;
+      for (let j = lo; j < hi; j++) {
+        const b = reference[j], short = Math.min(a.end-a.start, b.end-b.start);
+        const long = Math.max(a.end-a.start, b.end-b.start);
+        const shared = Math.min(a.end,b.end) - Math.max(a.start,b.start);
+        if (shared <= 0) continue;
+        if (shared >= 0.60 * short) { overlaps++; owners[j]++; }
+        if (blockedRef[j] || short < 0.30 * long || shared < 0.39 * short ||
+            Math.max(Math.abs(a.start-b.start), Math.abs(a.end-b.end)) > 2600) continue;
+        const score = shared / (short + long - shared);
+        if (score > bestScore) { runner = bestScore; bestScore = score; best = j; }
+        else runner = Math.max(runner, score);
+      }
+      return overlaps <= 1 && bestScore >= runner + 0.12 ? best : -1;
+    });
+    const claims = new Uint32Array(reference.length);
+    for (const j of pairs) if (j >= 0) claims[j]++;
+    return pairs.map(j => j >= 0 && owners[j] <= 1 && claims[j] === 1 ? j : -1);
+  }
+
+  // A succession of mutual matches must reproduce both the changing pace and
+  // pauses of the original. Exclude locally uniform or cyclic rhythms instead
+  // of treating a cue number as independent evidence of identity.
+  function rhythmAt(source, reference, i, j, first, end) {
+    const lo = Math.max(first + 1, i - 4), hi = Math.min(end, i + 5);
+    const distance = (a, b) => Math.abs(a-b) / Math.max(850, Math.min(a,b));
+    const cost = shift => {
+      let sum = 0;
+      for (let k = lo; k < hi; k++) {
+        const at = j + k - i + shift;
+        if (at < 1 || at >= reference.length) return Infinity;
+        const a = source[k], prev = source[k-1], b = reference[at], prior = reference[at-1];
+        sum += Math.min(1.5, distance(a.start-prev.start, b.start-prior.start)) +
+          Math.min(1.5, distance(a.start-prev.end, b.start-prior.end));
+      }
+      return sum / (2 * (hi-lo));
+    };
+    const direct = cost(0);
+    return direct < 0.53 && [-2,-1,1,2].every(shift => cost(shift) > direct + 0.045);
+  }
+
+  function exactFit(cues, refs, fit) {
+    if (fit.reliable && fit.score >= 0.9995 && cues.length === refs.length && cues.every((c,i) =>
+      Math.round(mapTime(fit,c.start)) === refs[i].start && Math.round(mapTime(fit,c.end)) === refs[i].end)) {
+      return {...fit,score:1,exactTimings:true};
+    }
+    return fit;
+  }
+
+  function timingFit(cues, refs, step, segments, fit) {
+    // Leave the established handling of major release edits and very short
+    // excerpts intact. The global fit establishes which passage to search.
+    if (fit.score >= 0.9995) return exactFit(cues, refs, fit);
+    if (!fit.reliable || fit.edits.length || fit.score < 0.68 || Math.min(cues.length,refs.length) < 24) return fit;
+    const base = cues.map(c=>({start:Math.round(mapTime(fit,c.start)), end:Math.round(mapTime(fit,c.end))}));
+    const pairs = timingCorrespondence(base, refs);
+    const chosen = Array(cues.length).fill(-1);
+    for (let first = 0; first < pairs.length;) {
+      if (pairs[first] < 0) { first++; continue; }
+      let end = first + 1;
+      while (end < pairs.length && pairs[end] === pairs[end-1] + 1 && pairs[end] >= 0) end++;
+      if (end-first >= 6) {
+        for (let i = first; i < end; i++) {
+          if (rhythmAt(base, refs, i, pairs[i], first, end)) chosen[i] = pairs[i];
+        }
+      }
+      first = end;
+    }
+    // Unknown cues retain their own global endpoints; never interpolate a
+    // correction through a missing passage. Reject crossing or incompatible
+    // touching boundaries rather than moving one of those unknown cues.
+    const selected = i => chosen[i] < 0 ? base[i] : refs[chosen[i]];
+    let changed;
+    do {
+      changed = false;
+      for (let i = 1; i < chosen.length; i++) {
+        if (chosen[i] < 0 && chosen[i-1] < 0) continue;
+        const gap = cues[i].start - cues[i-1].end, mappedGap = selected(i).start - selected(i-1).end;
+        if (gap < 0 || mappedGap < 0 || (gap === 0) !== (mappedGap === 0)) {
+          chosen[i-1] = chosen[i] = -1;
+          changed = true;
+        }
+      }
+    } while (changed);
+    const matched = chosen.filter(j=>j>=0).length;
+    if (matched < 0.72 * Math.max(cues.length,refs.length)) return fit;
+    const mapped = cues.map((_,i)=>selected(i));
+    if (mapped.some(c=>c.start<0 || c.end<=c.start)) return fit;
+    const {agreement, exact} = measuredTimeline(mapped, refs, step, segments);
+    if (agreement.segments !== segments || agreement.weakest < 0.65 || agreement.r <= fit.score + 0.003) return fit;
+    const bounds = [];
+    for (let i=0; i<cues.length; i++) bounds.push([cues[i].start,mapped[i].start], [cues[i].end,mapped[i].end]);
+    bounds.sort((a,b)=>a[0]-b[0]);
+    const points = [];
+    for (const point of bounds) {
+      const previous = points.at(-1);
+      if (previous && point[0] === previous[0] && point[1] === previous[1]) continue;
+      if (previous && (point[0] <= previous[0] || point[1] < previous[1])) return fit;
+      points.push(point);
+    }
+    const reviewRanges = fit.reviewRanges.filter(r => cues.some((c,i) => chosen[i]<0 && c.start<=r.endMs && c.end>=r.startMs));
+    return {...fit, timingPoints:points, matchedTimings:matched, score:exact ? 1 : clamp(agreement.r,0,1),
+      exactTimings:exact, reviewRanges, reason:'Corresponding cues follow the same sequence of pauses and durations.'};
+  }
+
+  function measuredTimeline(mapped, refs, step, segments) {
+    const mappedBounds = extent(mapped), refBounds = extent(refs);
+    const bounds = [Math.min(mappedBounds[0], refBounds[0]), Math.max(mappedBounds[1], refBounds[1])];
+    const actual = cueActivity(mapped, step, bounds), expected = cueActivity(refs, step, bounds);
+    const agreement = evaluate(actual, expected, step, {scale: 1, offset: 0}, 1, segments);
+    const exact = mapped.length === refs.length && mapped.every((cue, i) =>
+      cue.start === refs[i].start && cue.end === refs[i].end);
+    return {agreement,exact};
   }
 
   function align(input, reference, options = {}) {
@@ -1022,13 +1158,13 @@
             return checkLocalActivity(cues, source, ref, step, fit, false);
           }
           const starts = refCues.map(c => c.start), ends = refCues.map(c => c.end).sort((a, b) => a - b);
-          return shortEdgeReview(cues, starts, ends, local) || local;
+          return exactFit(cues, refCues, shortEdgeReview(cues, starts, ends, local) || local);
         }
-        return refineSmallSections(cues, refCues, source, ref, step, segments, local);
+        return timingFit(cues, refCues, step, segments, refineSmallSections(cues, refCues, source, ref, step, segments, local));
       }
     }
     const checked = checkLocalActivity(cues, source, ref, step, fit, audio);
-    return refCues ? refineSmallSections(cues, refCues, source, ref, step, segments, checked) : checked;
+    return refCues ? timingFit(cues, refCues, step, segments, refineSmallSections(cues, refCues, source, ref, step, segments, checked)) : checked;
   }
 
   const api = { align, mapTime };

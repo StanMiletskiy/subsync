@@ -113,3 +113,139 @@ test("short excerpts require a much stronger match than film-length subtitles", 
     }
   }
 });
+
+// Two subtitle editions can say the same thing in different words and set each
+// cue's in and out points independently. Only the test knows their correspondence.
+function independentTrack(seed = 719) {
+  const draw = random(seed), source = [], target = [];
+  const clock = time => Math.round(15940 + 1.0011 * time);
+  const jitter = () => Math.round((draw() - 0.5) * 740);
+  let start = 7800;
+  for (let i = 0; i < 180; i++) {
+    const end = start + 1450 + Math.floor(draw() * 1600);
+    source.push({start, end, text:"A source dialogue line."});
+    target.push({start:clock(start) + jitter(), end:clock(end) + jitter(), text:"別の言語の台詞。"});
+    const pause = i % 20 === 16 ? 6200 : 0;
+    start = end + 1100 + Math.floor(draw() * 2100) + pause;
+  }
+  return {source, target, clock};
+}
+
+function boundaryErrors(fit, source, target, indices) {
+  return indices.flatMap(i => ["start","end"].map(edge =>
+    Math.abs(Math.round(mapTime(fit, source[i][edge])) - target[i][edge])));
+}
+
+function assertOrderedOutput(fit, source) {
+  let previousEnd = -1;
+  for (const cue of source) {
+    const start = Math.round(mapTime(fit, cue.start)), end = Math.round(mapTime(fit, cue.end));
+    assert.ok(start >= previousEnd && end > start, "Lost cue order or a positive duration");
+    previousEnd = end;
+  }
+}
+
+test("uses independently timed matching dialogue instead of leaving cross-language cue boundaries on the global clock", () => {
+  const {source, target, clock} = independentTrack();
+  const indices = source.map((_, i) => i);
+  for (const [a, b] of [[source,target], [target,source]]) {
+    const fit = align(a, b);
+    assert.equal(fit.reliable, true);
+    assertOrderedOutput(fit, a);
+    for (const [t, step] of [[a[0].start,-1],[a.at(-1).end,1]]) {
+      const change = (mapTime(fit,t + step) - mapTime(fit,t)) * step;
+      assert.ok(change >= 0 && change <= 2, "Continue the timeline through either track edge");
+    }
+    const errors = boundaryErrors(fit, a, b, indices).sort((x,y) => x-y);
+    const initial = indices.flatMap(i => ["start","end"].map(edge => Math.abs(clock(source[i][edge]) - target[i][edge])));
+    assert.ok(initial.reduce((sum, e) => sum + e, 0) / initial.length > 140);
+    assert.ok(errors[Math.floor(errors.length * 0.9)] <= 35, "Most verified in/out points should follow their reference");
+    assert.ok(errors.reduce((sum, e) => sum + e, 0) / errors.length < 45, "Correct the timing itself");
+  }
+});
+
+test("equal cue totals with compensating insertions and deletions do not shift subsequent dialogue by one slot", () => {
+  const {source, target, clock} = independentTrack(240);
+  const omitted = new Set([23,111]);
+  const ref = target.flatMap((cue, i) => {
+    if (omitted.has(i)) return [];
+    if (i !== 56 && i !== 136) return [cue];
+    return [cue,{start:cue.end + 1700, end:cue.end + 2900, text:"[doorbell]"}];
+  });
+  assert.equal(ref.length, source.length);
+  const fit = align(source, ref);
+  assert.equal(fit.reliable, true);
+  assertOrderedOutput(fit, source);
+  const interior = source.map((_,i) => i).filter(i => (i >= 27 && i <= 52) || (i >= 115 && i <= 132));
+  const errors = boundaryErrors(fit, source, target, interior).sort((a,b) => a-b);
+  assert.ok(errors[Math.floor(errors.length * 0.85)] <= 45, "Retain established correspondence across both insertions");
+  for (const i of omitted) {
+    for (const edge of ["start","end"]) assert.ok(Math.abs(mapTime(fit,source[i][edge])-clock(source[i][edge])) < 650);
+  }
+});
+
+test("a merged pair and a split line cannot drag a source cue onto a partial or combined reference event", () => {
+  const {source, target, clock} = independentTrack(820);
+  const ref = target.flatMap((cue, i) => {
+    if (i === 42) return [{...cue, end:target[43].end}];
+    if (i === 43) return [];
+    if (i !== 118) return [cue];
+    const middle = Math.floor((cue.start + cue.end) / 2);
+    return [{...cue, end:middle-45},{...cue, start:middle+45}];
+  });
+  assert.equal(source.length, ref.length);
+  const fit = align(source, ref);
+  assert.equal(fit.reliable, true);
+  assertOrderedOutput(fit, source);
+  for (const i of [42,43,118]) {
+    for (const edge of ["start","end"]) assert.ok(Math.abs(mapTime(fit,source[i][edge])-clock(source[i][edge])) < 650,
+      "A reference-only internal boundary or combined duration is not an identified source boundary");
+  }
+  const unaffected = source.map((_, i) => i).filter(i => i >= 50 && i < 110);
+  const outside = boundaryErrors(fit, source, target, unaffected).sort((a,b) => a-b);
+  assert.ok(outside[Math.floor(outside.length * 0.85)] <= 45, "Clear cues away from the split and merge still benefit");
+  assert.ok(fit.score < 1, "Activity differs at the ambiguous cuts");
+});
+
+test("equal-length unrelated and strictly repetitive subtitle tracks cannot validate their own ordinal pairing", () => {
+  const {source} = independentTrack(520);
+  const different = dialogue(source.length, 126583, 35000).map(cue => ({...cue,text:"Чужой текст."}));
+  assert.equal(align(source,different).reliable,false);
+  const repeated = source.map((_,i) => ({start:3000+i*4600,end:5000+i*4600}));
+  const jitter = random(53);
+  const shifted = repeated.map(cue => ({start:17510+cue.start+Math.floor(jitter()*160),end:17510+cue.end+Math.floor(jitter()*160)}));
+  assert.equal(align(repeated, shifted).reliable,false);
+});
+
+test("a reference-only near-duplicate cannot determine the time of its contested cue", () => {
+  const {source, target} = independentTrack(948);
+  const disputed = 80;
+  const reference = target.flatMap((cue, i) => i === disputed ?
+    [{...cue, start:cue.start - 45, end:cue.end - 45}, {...cue, start:cue.start + 45, end:cue.end + 45}] : [cue]);
+  const fit = align(source, reference);
+  assert.equal(fit.reliable, true);
+  for (const edge of ["start","end"]) {
+    const time = source[disputed][edge];
+    // Both reference candidates have the same shape and nearly the same time.
+    // The previously established clock is the only independent estimate here.
+    assert.ok(Math.abs(mapTime(fit,time) - (fit.scale * time + fit.offsetMs)) <= 2);
+  }
+  const supported = source.map((_,i) => i).filter(i => Math.abs(i - disputed) > 3);
+  const errors = boundaryErrors(fit, source, target, supported).sort((a,b) => a-b);
+  assert.ok(errors[Math.floor(errors.length * 0.85)] <= 45);
+  assertOrderedOutput(fit, source);
+});
+
+test("a perfect global offset earns 100% from the actual exported times without claiming local cue corrections", () => {
+  const source = dialogue(90, 486);
+  const reference = mapped(source, 1, 8937);
+  const fit = align(source, reference);
+  const indices = source.map((_,i) => i);
+  assert.equal(fit.reliable, true);
+  assert.ok(boundaryErrors(fit, source, reference, indices).every(error => error === 0));
+  assert.equal(fit.score, 1);
+  assert.equal(fit.exactTimings, true);
+  assert.ok(!fit.matchedTimings, "A perfect global correction did not need per-cue adjustments");
+  const duplicate = reference.flatMap((cue, i) => i === 24 ? [cue, {...cue}] : [cue]);
+  assert.notEqual(align(source, duplicate).exactTimings, true, "Equal activity alone does not prove equal cue boundaries");
+});
