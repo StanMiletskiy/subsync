@@ -134,7 +134,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
   <style>
 .translation-page .topbar a { color: #e0ecdf; font-size: .9rem; text-underline-offset: .22em; }
 .translation-page .topbar a:hover { color: var(--accent); }
-.translation-main { max-width: 800px; }
+.translation-main { max-width: 1100px; }
 .translation-panel { padding: clamp(18px, 4vw, 32px); }
 .translation-panel .file-block { margin-top: 16px; }
 .translation-panel .dropzone { min-height: 88px; }
@@ -154,6 +154,91 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 .translation-main footer a { color: inherit; text-underline-offset: .2em; }
 @media (max-width: 430px) { .language-pair { grid-template-columns: 1fr; gap: 10px; } .translation-main .mast h1 { font-size: clamp(2.45rem, 10vw, 3.2rem); } }
 
+.translation-main > :not(.translation-review) { max-width: 800px; margin-inline: auto; }
+.saved-draft, .result-actions, .saved-draft-actions, .review-header, .review-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+}
+.saved-draft { flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; padding: 14px 18px; background: #e8eee4; border: 1px solid var(--line); border-radius: 9px; }
+.saved-draft h2 { font-size: .93rem; letter-spacing: -.015em; }
+.saved-draft p { overflow-wrap: anywhere; color: var(--muted); font-size: .86rem; }
+.saved-draft-actions, .result-actions { flex-wrap: wrap; }
+.result-actions a { color: #28583d; font-size: .91rem; font-weight: 600; text-underline-offset: .2em; }
+.translation-review { margin: 24px 0 0; padding: clamp(17px, 3vw, 30px); scroll-margin-top: 12px; }
+.translation-review:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.review-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 0 12px; padding-block: 7px; background: var(--white);
+}
+.review-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.review-hint { margin-top: 4px; }
+.review-header .review-status { grid-column: 1 / -1; }
+.review-header .review-status:empty { display: none; }
+.review-cue.is-edited .review-number { color: #286047; }
+.review-edited { padding: 0 5px; border: 1px solid #cadcc8; border-radius: 4px; color: #2d5d40; background: #eff5e9; font: 600 .7rem/1.55 system-ui, sans-serif; }
+.review-edited[hidden] { display: none; }
+@media (min-height: 610px) and (min-width: 520px), (min-height: 760px) and (max-width: 519px) {
+  .review-header { position: sticky; top: 0; z-index: 2; padding-block: 9px; border-bottom: 1px solid var(--line); }
+  .translation-review :is(input, textarea, .review-time, #review-prev, #review-next) { scroll-margin-block-start: 6.5rem; }
+}
+@media (max-width: 519px) {
+  .review-header { grid-template-columns: minmax(0, 1fr); }
+  .review-header-actions { margin-top: 7px; }
+  .translation-review :is(input, textarea, .review-time, #review-prev, #review-next) { scroll-margin-block-start: 9rem; }
+}
+.review-button {
+  min-height: 38px; padding: 7px 13px; border: 1px solid #a6b5aa; border-radius: 6px;
+  background: var(--white); color: #284c3d; font-size: .88rem;
+}
+.review-button:hover:enabled { background: #eaf2e4; border-color: #75917d; }
+#review-save { background: #eaf2e2; border-color: #adbd9f; }
+#review-save:hover:enabled { background: #deebd5; }
+.review-status { font-size: .86rem; color: var(--muted); overflow-wrap: anywhere; }
+.review-status:not(:empty) { margin-top: 8px; }
+.review-status[data-kind="error"] { color: #903215; }
+.review-filters { margin: 18px 0; }
+.review-search-label { display: block; margin-bottom: 4px; font-size: .86rem; font-weight: 650; }
+#review-search {
+  width: min(100%, 450px); min-height: 39px; padding: 7px 11px;
+  color: var(--ink); background: var(--white); border: 1px solid #a6b5aa; border-radius: 6px;
+}
+.review-cue, .review-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(16px, 3vw, 36px); }
+.review-columns { padding: 8px 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--muted); background: #f1f5ee; font-size: .84rem; font-weight: 650; }
+.review-cue { padding: 12px 10px 15px; row-gap: 5px; border-bottom: 1px solid var(--line); }
+.review-time { grid-column: 1 / -1; margin: 0; color: var(--muted); font: .75rem/1.5 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.review-original, .review-translation { min-width: 0; overflow-wrap: anywhere; }
+.review-original { white-space: pre-wrap; padding-block: 5px; }
+.review-translation :is(input, textarea) {
+  max-width: 100%; min-width: 0; padding: 4px 7px; color: var(--ink); background: white;
+  border: 1px solid #b6c5b8; border-radius: 5px; font: inherit; line-height: 1.4;
+}
+.review-time { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.review-number { color: #354d40; font-weight: 650; }
+.review-translation .review-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px; }
+.review-translation .review-line + .review-line { margin-top: 4px; }
+.review-translation .review-literal { white-space: pre-wrap; }
+.review-translation textarea { width: 100%; min-height: 2.25rem; resize: vertical; }
+.review-translation .review-line textarea { flex: 1 1 12ch; width: auto; field-sizing: content; }
+.review-translation :is(input, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.review-pagination { justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+#review-page { color: var(--muted); font-size: .86rem; text-align: center; font-variant-numeric: tabular-nums; }
+@media (max-width: 650px) {
+  .review-columns { display: none; }
+  .review-cue { grid-template-columns: minmax(0, 1fr); padding: 14px 0; row-gap: 8px; }
+  .review-cue:first-child { border-top: 1px solid var(--line); }
+  .review-time { grid-column: auto; }
+  .review-original { padding-block: 0; }
+  .review-original::before, .review-translation::before { display: block; margin-bottom: 4px; color: var(--muted); font-size: .77rem; font-weight: 650; }
+  .review-original::before { content: "Original"; }
+  .review-translation::before { content: "Translation"; }
+}
+@media (max-width: 430px) {
+  .saved-draft { padding: 13px; }
+  .review-pagination { justify-content: space-between; gap: 8px; }
+  .review-pagination .review-button { padding-inline: 9px; }
+}
+
 </style>
 </head>
 <body class="translation-page">
@@ -166,8 +251,15 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
   <main class="wrap translation-main">
     <div class="mast">
       <h1>Free AI Translation</h1>
-      <p>Translate SRT dialogue on your device. Timestamps, line breaks and formatting stay intact.</p>
+      <p>Translate SRT for free on your device. This feature uses Google's AI model built in your Google Chrome browser.</p>
     </div>
+    <section class="saved-draft" id="saved-draft" aria-labelledby="saved-draft-label" hidden>
+      <div><h2 id="saved-draft-label">Saved review</h2><p id="saved-draft-name" dir="auto"></p></div>
+      <div class="saved-draft-actions">
+        <button type="button" class="review-button" id="resume-draft">Resume review</button>
+        <button type="button" class="text-button" id="delete-draft">Remove saved copy</button>
+      </div>
+    </section>
     <section class="panel translation-panel" aria-labelledby="translation-heading">
       <h2 id="translation-heading">Translate a subtitle</h2>
       <div class="file-block">
@@ -198,11 +290,36 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       <p class="hint" id="translation-mode" hidden></p>
       <div id="translation-output" class="translation-output" hidden>
         <p id="result-file" dir="auto"></p>
-        <button type="button" class="export" id="export" disabled>Export SRT</button>
+        <div class="result-actions">
+          <button type="button" class="export" id="export" disabled>Download SRT</button>
+          <a href="#translation-review">Review &amp; edit</a>
+        </div>
       </div>
     </section>
+    <section class="panel translation-review" id="translation-review" aria-labelledby="review-heading" tabindex="-1" hidden>
+      <header class="review-header">
+        <h2 id="review-heading">Review translation</h2>
+        <div class="review-header-actions">
+          <button type="button" class="review-button" id="review-save">Save edits</button>
+          <button type="button" class="review-button" id="review-download">Download SRT</button>
+        </div>
+        <p class="review-status" id="review-status" tabindex="-1" role="status" aria-live="polite" aria-atomic="true"></p>
+      </header>
+      <p class="hint review-hint">Edit the translated dialogue. You can save one review in this browser.</p>
+      <div class="review-filters">
+        <label class="review-search-label" for="review-search">Search dialogue</label>
+        <input id="review-search" type="search" placeholder="Find original or translated text" autocomplete="off">
+      </div>
+      <div class="review-columns" aria-hidden="true"><span>Original</span><span>Translation</span></div>
+      <div id="review-rows"></div>
+      <nav class="review-pagination" aria-label="Subtitle cue pages">
+        <button type="button" class="review-button" id="review-prev" aria-label="Previous subtitle page">Previous</button>
+        <span id="review-page" aria-live="polite" aria-atomic="true"></span>
+        <button type="button" class="review-button" id="review-next" aria-label="Next subtitle page">Next</button>
+      </nav>
+    </section>
     <details class="help"><summary>About translation quality</summary>
-      <p>When Gemini Nano supports both languages, it uses nearby dialogue to translate in context. For English to Russian, Chrome translates from the original English. Check names, slang and how speakers address each other before publishing. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
+      <p>When Gemini Nano supports both languages, it uses nearby dialogue to translate in context. For English to Russian, Chrome translates from the original English. Check names, slang and how speakers address each other before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
     </details>
     <footer><span>Cueframe</span><a href="https://perfectintegers.com/subsync/">Sync subtitle timings</a></footer>
   </main>
@@ -431,11 +548,13 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     return text.replace(/&(amp|lt|gt|quot|apos);/gi, (_, name) => entities[name.toLowerCase()]);
   }
 
-  function safeText(value, cue) {
-    if (typeof value !== 'string' || !value.trim()) throw Error('No translation was returned for cue ' + cue + '.');
+  function safeText(value, unit) {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw Object.assign(Error('No translation was returned for cue ' + unit.cue + '.'), {cueNumber:unit.cue, unitId:unit.id});
+    }
     if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value) ||
         /(?:^|[\r\n])[ \t]*\d+:[\d:.,]+[ \t]*-->/.test(value) || /\{\\|\\[Nnh]/.test(value)) {
-      throw Error('The translation for cue ' + cue + ' contains subtitle controls.');
+      throw Object.assign(Error('The translation for cue ' + unit.cue + ' contains subtitle controls.'), {cueNumber:unit.cue, unitId:unit.id});
     }
     return value.trim().replace(/\s+/gu, ' ')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -469,6 +588,37 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     return JSON.stringify(layout);
   }
 
+  function reviewCues(parsed, units, spans) {
+    let headerStart = parsed.text.charCodeAt(0) === 0xfeff ? 1 : 0;
+    let next = 0;
+    return parsed.cues.map((cue, index) => {
+      // The parsed cue body starts either just after the timing line's terminator
+      // or at its very end for an empty cue. Keep the identifier and timing verbatim.
+      const header = parsed.text.slice(headerStart, cue.bodyStart).replace(/(?:\r\n|[\r\n])$/, '');
+      const rows = header.split(/\r\n|[\r\n]/);
+      const timing = rows.pop();
+      const previous = rows.at(-1);
+      const identifier = previous !== undefined && !/^[ \t]*$/.test(previous) ? previous : null;
+      headerStart = cue.bodyEnd;
+      const lines = [];
+      for (const row of cue.text.matchAll(/[^\r\n]+/g)) {
+        const lineStart = cue.bodyStart + row.index;
+        const lineEnd = lineStart + row[0].length;
+        const fragments = [];
+        let cursor = lineStart;
+        while (next < units.length && units[next].line === lineStart) {
+          const span = spans[next], unit = units[next++];
+          if (span.start > cursor) fragments.push({text:parsed.text.slice(cursor, span.start), unitId:null});
+          fragments.push({text:unit.text, unitId:unit.id});
+          cursor = span.end;
+        }
+        if (cursor < lineEnd) fragments.push({text:parsed.text.slice(cursor, lineEnd), unitId:null});
+        lines.push(fragments);
+      }
+      return {number:index + 1, identifier, timing, original:cue.text, lines};
+    });
+  }
+
   function prepare(decodedText) {
     const parsed = srt.parse(decodedText);
     const units = [], spans = [];
@@ -482,6 +632,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     // Sample across the file since a title card or a credit may use a different language.
     const samples = [], count = Math.min(units.length, 24);
     for (let i = 0; i < count; i++) samples.push(units[Math.floor((i + 0.5) * units.length / count)].text);
+    const cues = reviewCues(parsed, units, spans);
 
     function render(strings) {
       if (!Array.isArray(strings) || strings.length !== units.length) throw Error('The translation is incomplete.');
@@ -489,18 +640,32 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       let cursor = 0;
       for (let i = 0; i < units.length; i++) {
         const span = spans[i], unit = units[i];
-        const replacement = strings[i] === unit.text ? span.raw : safeText(strings[i], unit.cue);
+        const replacement = strings[i] === unit.text ? span.raw : safeText(strings[i], unit);
         result.push(decodedText.slice(cursor, span.start), replacement);
         cursor = span.end;
       }
       result.push(decodedText.slice(cursor));
       const output = result.join('');
-      if (inspect(srt.parse(output)) !== originalLayout) {
-        throw Error('The translation would change subtitle formatting. No file was exported.');
+      const outputLayout = inspect(srt.parse(output));
+      if (outputLayout !== originalLayout) {
+        // Header/body entries alternate in the signatures. Locate the first damaged
+        // cue only on failure so valid downloads do not pay for per-cue comparisons.
+        const before = JSON.parse(originalLayout), after = JSON.parse(outputLayout);
+        const mismatch = before.findIndex((value, i) => JSON.stringify(value) !== JSON.stringify(after[i]));
+        const part = mismatch < 0 ? before.length - 1 : mismatch;
+        const cue = cues[Math.min(Math.floor(part / 2), cues.length - 1)];
+        const error = Object.assign(Error('The translation would change subtitle formatting in cue ' + cue.number + '. No file was exported.'), {cueNumber:cue.number});
+        if (part % 2 === 1 && Array.isArray(after[part])) {
+          const line = before[part].findIndex((value, i) => JSON.stringify(value) !== JSON.stringify(after[part][i]));
+          const changed = (cue.lines[line] || []).filter(f => f.unitId !== null && strings[f.unitId] !== f.text);
+          if (changed.length === 1) error.unitId = changed[0].unitId;
+        }
+        throw error;
       }
       return output;
     }
-    return {units, render, cueCount:parsed.cues.length, sample:samples.join(' ').slice(0, 1800)};
+    return {units, cues, render,
+      cueCount:parsed.cues.length, sample:samples.join(' ').slice(0, 1800)};
   }
 
   const api = {prepare};
@@ -858,6 +1023,330 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 
 </script>
   <script>
+// SPDX-License-Identifier: GPL-3.0-or-later
+(function () {
+  'use strict';
+
+  const databaseName = 'cueframe-subtitle-editor';
+  const storeName = 'drafts';
+  const key = 'latest';
+  const encodings = new Set(['utf-8', 'utf-16le', 'utf-16be']);
+  const language = /^[a-z]{2,3}(?:-[a-z0-9]{1,8})*$/i;
+  let pending = Promise.resolve();
+
+  function valid(record) {
+    if (!record || record.version !== 1 || !Number.isSafeInteger(record.savedAt) || record.savedAt < 0 ||
+        typeof record.filename !== 'string' || !record.filename.trim() ||
+        typeof record.sourceText !== 'string' || !record.sourceText.length ||
+        !encodings.has(record.encoding)) return false;
+    for (const tag of [record.sourceLanguage, record.targetLanguage]) {
+      if (typeof tag !== 'string' || !language.test(tag) || tag === 'und') return false;
+    }
+    if (!Array.isArray(record.generatedLines) || !Array.isArray(record.editedLines) ||
+        record.generatedLines.length !== record.editedLines.length) return false;
+    for (let i = 0; i < record.editedLines.length; i++) {
+      if (typeof record.editedLines[i] !== 'string' || !record.editedLines[i].trim() ||
+          typeof record.generatedLines[i] !== 'string' || !record.generatedLines[i].trim()) return false;
+    }
+    return true;
+  }
+
+  function open(create) {
+    return new Promise((resolve, reject) => {
+      const factory = globalThis.indexedDB;
+      if (!factory) throw new Error('Local draft storage is unavailable in this browser.');
+      const request = factory.open(databaseName, 1);
+      let blocked = false, absent = false;
+      request.onblocked = () => {
+        blocked = true;
+        reject(new Error('Another tab is blocking local draft storage. Close other Cueframe tabs and try again.'));
+      };
+      request.onupgradeneeded = () => {
+        // Reading an absent database must leave the origin without a new store.
+        if (blocked || !create) {
+          absent = !create;
+          request.transaction.abort();
+        } else request.result.createObjectStore(storeName);
+      };
+      request.onerror = () => {
+        if (absent && request.error?.name === 'AbortError') resolve(null);
+        else reject(request.error);
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        if (blocked) { db.close(); return; }
+        db.onversionchange = () => db.close();
+        resolve(db);
+      };
+    });
+  }
+
+  function serialize(action) {
+    const next = pending.then(action);
+    pending = next.catch(() => {});
+    return next;
+  }
+
+  // Resolve on commit rather than request success. A later quota or transaction
+  // failure must preserve the previous saved version and be reported to the UI.
+  function transact(mode, create, operation) {
+    return serialize(async () => {
+      const db = await open(create);
+      if (!db) return operation(null, undefined);
+      try {
+        return await new Promise((resolve, reject) => {
+          const transaction = db.transaction(storeName, mode);
+          let result, failure;
+          transaction.oncomplete = () => resolve(result);
+          transaction.onabort = () => reject(failure || transaction.error || new Error('Local draft storage could not finish.'));
+          const store = transaction.objectStore(storeName);
+          const read = store.get(key);
+          // The comparison and mutation share the same active transaction in
+          // every tab. Returning to the event loop between them would lose that guarantee.
+          read.onsuccess = () => {
+            try { result = operation(store, read.result); }
+            catch (error) { failure = error; transaction.abort(); }
+          };
+        });
+      } finally { db.close(); }
+    });
+  }
+
+  function currentRevision(record) {
+    if (!valid(record)) return null;
+    return record.revision || 'legacy-' + record.savedAt;
+  }
+
+  function checkRevision(current, expected) {
+    if (expected === undefined || currentRevision(current) === expected) return;
+    const error = new Error('The saved draft changed in another tab.');
+    error.name = 'DraftConflictError';
+    throw error;
+  }
+
+  async function save(draft, expectedRevision) {
+    // Snapshot editor values immediately, even if a previous click is still saving.
+    const {filename, sourceLanguage, targetLanguage, encoding, sourceText, generatedLines, editedLines} = draft;
+    const record = {version: 1, savedAt: Date.now(), filename, sourceLanguage, targetLanguage, encoding, sourceText,
+      generatedLines: generatedLines?.slice(), editedLines: editedLines?.slice()};
+    if (!valid(record)) throw new Error('The subtitle draft is incomplete.');
+    record.revision = globalThis.crypto.randomUUID();
+    await transact('readwrite', true, (store, current) => {
+      checkRevision(current, expectedRevision);
+      store.put(record, key);
+    });
+    return record;
+  }
+
+  async function load() {
+    return transact('readonly', false, (_store, record) => {
+      const revision = currentRevision(record);
+      return revision === null ? null : {...record, revision};
+    });
+  }
+
+  async function clear(expectedRevision) {
+    await transact('readwrite', false, (store, current) => {
+      checkRevision(current, expectedRevision);
+      if (store) store.delete(key);
+    });
+  }
+
+  const api = {load, save, clear};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  globalThis.CueTranslationDraft = api;
+})();
+
+</script>
+  <script>
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+(function () {
+  'use strict';
+
+  const pageSize = 25;
+  const searchable = text => text.normalize('NFKC').toLowerCase();
+
+  function create(section, {onDirtyChange = () => {}} = {}) {
+    const doc = section.ownerDocument;
+    const element = (tag, className, text) => {
+      const node = doc.createElement(tag);
+      node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+    const rows = section.querySelector('#review-rows'), search = section.querySelector('#review-search');
+    const previous = section.querySelector('#review-prev'), next = section.querySelector('#review-next');
+    const pageLabel = section.querySelector('#review-page');
+    const snapshots = new WeakMap(), fields = new Map();
+    let units = [];
+    let cues = [], generated = [], current = [], saved = [], changed = new Set();
+    let matches = [], page = 0, generation = 0;
+
+    function reportChange(wasDirty) {
+      const dirty = changed.size > 0;
+      if (wasDirty !== dirty) onDirtyChange(dirty);
+    }
+
+    function edit(id, field) {
+      const wasDirty = changed.size > 0;
+      // Each field owns one physical subtitle fragment. Preserve every original
+      // line separator, even when the editor pastes a multiline replacement.
+      const value = field.value.replace(/[\r\n]+/g, ' ');
+      if (value !== field.value) field.value = value;
+      current[id] = value;
+      if (value === saved[id]) changed.delete(id);
+      else changed.add(id);
+      reportChange(wasDirty);
+    }
+
+    function cueRow(cue) {
+      const row = element('article', 'review-cue'), heading = element('h3', 'review-time');
+      heading.tabIndex = -1;
+      const label = 'Cue ' + (cue.identifier || cue.number);
+      const marker = element('span', 'review-edited', 'Edited'), ids = [];
+      function updateMarker() {
+        const edited = ids.some(id => current[id] !== generated[id]);
+        marker.hidden = !edited;
+        row.classList.toggle('is-edited', edited);
+      }
+      heading.append(element('span', 'review-number', label), element('span', 'review-stamps', cue.timing), marker);
+      const original = element('div', 'review-original'), translation = element('div', 'review-translation');
+      original.setAttribute('aria-label', 'Original, ' + label);
+      for (const [lineIndex, line] of cue.lines.entries()) {
+        const sourceLine = element('div', 'review-line'), resultLine = element('div', 'review-line');
+        sourceLine.dir = 'auto'; resultLine.dir = 'auto';
+        let part = 0;
+        for (const fragment of line) {
+          const id = fragment.unitId;
+          sourceLine.append(element('span', id === null ? 'review-literal' : '', fragment.text));
+          if (id === null) {
+            resultLine.append(element('span', 'review-literal', fragment.text));
+            continue;
+          }
+          const input = element('textarea', 'review-input');
+          fields.set(id, input); ids.push(id);
+          input.required = true; input.dir = 'auto'; input.spellcheck = true; input.value = current[id];
+          input.rows = Math.min(4, Math.max(1, Math.ceil(input.value.length / 48)));
+          input.setAttribute('aria-label', 'Translation, ' + label + ', line ' + (lineIndex+1) + ', part ' + (++part));
+          input.addEventListener('input', () => { edit(id, input); updateMarker(); });
+          resultLine.append(input);
+        }
+        original.append(sourceLine); translation.append(resultLine);
+      }
+      if (!cue.lines.length) {
+        original.append(element('span', 'review-literal', '—'));
+        translation.append(element('span', 'review-literal', '—'));
+      }
+      updateMarker();
+      row.append(heading, original, translation);
+      return row;
+    }
+
+    function show() {
+      const total = matches.length;
+      page = Math.max(0, Math.min(page, Math.ceil(total / pageSize) - 1));
+      const start = page * pageSize, end = Math.min(start + pageSize, total);
+      fields.clear();
+      rows.replaceChildren(...matches.slice(start, end).map(cueRow));
+      previous.disabled = page === 0;
+      next.disabled = end >= total;
+      pageLabel.textContent = total ? (start+1) + '–' + end + ' of ' + total.toLocaleString() : 'No matching cues';
+    }
+
+    function filter() {
+      const query = searchable(search.value.trim());
+      if (!query) { matches = cues; return; }
+      matches = cues.filter(cue => {
+        if (searchable(cue.identifier || String(cue.number)).includes(query)) return true;
+        const original = cue.lines.map(line => line.map(f => f.text).join('')).join(' ');
+        if (searchable(original).includes(query)) return true;
+        const translated = cue.lines.map(line => line.map(f => f.unitId === null ? f.text : current[f.unitId]).join('')).join(' ');
+        return searchable(translated).includes(query);
+      });
+    }
+
+    search.addEventListener('input', () => { page = 0; filter(); show(); });
+    function navigate(delta) {
+      page += delta; filter(); show();
+      const heading = rows.querySelector('.review-time');
+      if (heading) {
+        heading.focus({preventScroll:true});
+        heading.scrollIntoView({block:'start'});
+      }
+    }
+    previous.addEventListener('click', () => navigate(-1));
+    next.addEventListener('click', () => navigate(1));
+
+    function focusUnit(id) {
+      if (!Number.isInteger(id) || !units[id]) return false;
+      const cue = cues[units[id].cue-1];
+      let index = matches.indexOf(cue);
+      if (index < 0) { search.value = ''; matches = cues; index = matches.indexOf(cue); }
+      page = Math.floor(index / pageSize); show();
+      const input = fields.get(id);
+      if (!input) return false;
+      input.focus();
+      return true;
+    }
+
+    function focusInvalid(cueNumber) {
+      const ids = units.filter(u => !cueNumber || u.cue === cueNumber).map(u => u.id);
+      const first = ids.find(id => !current[id].trim()) ?? ids.find(id => changed.has(id));
+      return focusUnit(first ?? (cueNumber ? ids[0] : undefined));
+    }
+
+    function linesCopy(lines, length) {
+      if (!Array.isArray(lines) || lines.length !== length ||
+          Array.from(lines).some(value => typeof value !== 'string')) throw Error('The translation is incomplete.');
+      return lines.slice();
+    }
+
+    function load(prepared, generatedLines, savedLines = generatedLines) {
+      const initial = linesCopy(generatedLines, prepared.units.length);
+      const values = linesCopy(savedLines, prepared.units.length);
+      const wasDirty = changed.size > 0;
+      generation++;
+      cues = prepared.cues; units = prepared.units;
+      generated = initial; current = values; saved = values.slice(); changed.clear();
+      search.value = ''; matches = cues; page = 0;
+      section.hidden = false; show(); reportChange(wasDirty);
+    }
+
+    function clear() {
+      const wasDirty = changed.size > 0;
+      generation++;
+      cues = []; units = []; generated = []; current = []; saved = []; changed.clear(); fields.clear();
+      matches = []; page = 0;
+      rows.replaceChildren(); search.value = ''; pageLabel.textContent = '';
+      section.hidden = true; reportChange(wasDirty);
+    }
+
+    function getLines() {
+      const snapshot = current.slice();
+      snapshots.set(snapshot, generation);
+      return snapshot;
+    }
+
+    function markSaved(snapshot) {
+      if (snapshots.has(snapshot) && snapshots.get(snapshot) !== generation) return false;
+      const wasDirty = changed.size > 0;
+      saved = linesCopy(snapshot, current.length);
+      changed.clear();
+      current.forEach((value, i) => { if (value !== saved[i]) changed.add(i); });
+      reportChange(wasDirty);
+      return true;
+    }
+
+    return {load, clear, hasUnsaved: () => changed.size > 0, getLines, markSaved, focusUnit, focusInvalid};
+  }
+
+  const api = {create};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  globalThis.CueTranslationReview = api;
+})();
+
+</script>
+  <script>
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 (function () {
   'use strict';
@@ -886,12 +1375,144 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     for (let i = 0; i < text.length; i++) view.setUint16(2 * i, text.charCodeAt(i), encoding === 'utf-16le');
     return new Blob([data], {type});
   }
+  function resultWorkspace(scope, onResume) {
+    const doc = scope.document;
+    const el = id => doc.getElementById(id);
+    const save = el('review-save'), download = el('export'), status = el('review-status');
+    const strip = el('saved-draft'), resume = el('resume-draft'), remove = el('delete-draft');
+    const store = scope.CueTranslationDraft;
+    let current = null, saved = null, busy = false, stored = false, lastDownload = null;
+    const review = scope.CueTranslationReview.create(el('translation-review'), {onDirtyChange: dirty => {
+      status.dataset.kind = '';
+      status.textContent = dirty ? 'Unsaved edits.' : '';
+      updateButtons();
+    }});
+
+    function updateButtons() {
+      save.disabled = !current || busy || (stored && !review.hasUnsaved());
+      resume.disabled = remove.disabled = busy;
+    }
+    function showSaved(snapshot) {
+      saved = snapshot;
+      strip.hidden = !snapshot;
+      if (snapshot) el('saved-draft-name').textContent = exportName(snapshot);
+    }
+    function exportName(item) {
+      return item.filename.replace(/\.srt$/i, '') + '.' + item.targetLanguage + '.srt';
+    }
+    function sameSource(a, b) {
+      return a && b && a.filename === b.filename && a.sourceText === b.sourceText &&
+        a.sourceLanguage === b.sourceLanguage && a.targetLanguage === b.targetLanguage;
+    }
+    function needsProtection() {
+      if (!review.hasUnsaved()) return false;
+      return !lastDownload || review.getLines().some((line, i) => line !== lastDownload[i]);
+    }
+    function mayReplace() {
+      return !needsProtection() || scope.confirm('Discard your unsaved subtitle edits?');
+    }
+    function clear() {
+      current = null; stored = false; lastDownload = null;
+      review.clear();
+      el('translation-output').hidden = true; download.disabled = true;
+      status.dataset.kind = ''; status.textContent = ''; updateButtons();
+    }
+    function open(prepared, item, isSaved = false) {
+      const lines = item.editedLines || item.generatedLines;
+      prepared.render(lines);
+      current = {prepared, item}; stored = isSaved; lastDownload = null;
+      review.load(prepared, item.generatedLines, lines);
+      el('result-file').textContent = exportName(item);
+      el('translation-output').hidden = false; download.disabled = false;
+      status.dataset.kind = '';
+      status.textContent = isSaved ? 'Saved review restored.' : '';
+      updateButtons();
+    }
+    function reportInvalid(error) {
+      status.textContent = error.message || 'Check the edited dialogue and try again.';
+      status.dataset.kind = 'error';
+      if (!review.focusUnit(error.unitId) && !review.focusInvalid(error.cueNumber)) status.focus?.();
+    }
+    async function refreshAfterConflict(error) {
+      if (error?.name !== 'DraftConflictError') return false;
+      showSaved(await store.load().catch(() => null));
+      stored = false;
+      return true;
+    }
+    // An unavailable local database must never prevent reviewing or downloading.
+    const initialRead = store.load().then(showSaved, () => {});
+    save.addEventListener('click', async () => {
+      if (!current || busy) return;
+      const active = current, lines = review.getLines();
+      try { active.prepared.render(lines); } catch (error) { reportInvalid(error); return; }
+      busy = true; updateButtons();
+      try {
+        await initialRead;
+        if (active !== current) return;
+        if (saved && !sameSource(saved, active.item) &&
+            !scope.confirm('Replace the saved review of ' + exportName(saved) + ' with this subtitle?')) return;
+        const snapshot = await store.save({...active.item, editedLines:lines}, saved?.revision ?? null);
+        showSaved(snapshot);
+        if (active !== current) return;
+        stored = true;
+        review.markSaved(lines);
+        status.dataset.kind = '';
+        status.textContent = review.hasUnsaved() ? 'Saved. Newer edits are still unsaved.' : 'Edits saved in this browser.';
+      } catch (error) {
+        const conflict = await refreshAfterConflict(error);
+        if (active === current) {
+          status.dataset.kind = 'error';
+          status.textContent = conflict ? 'Another tab changed the saved review. Your edits are still here. Save again to replace that copy.'
+            : 'Could not save in this browser. You can still download the SRT.';
+        }
+      } finally { busy = false; updateButtons(); }
+    });
+    function downloadCurrent() {
+      if (!current) return;
+      const lines = review.getLines();
+      try {
+        const text = current.prepared.render(lines);
+        const url = scope.URL.createObjectURL(subtitleBlob(text, current.item.encoding));
+        const link = doc.createElement('a');
+        link.href = url; link.download = exportName(current.item); doc.body.append(link); link.click(); link.remove();
+        scope.setTimeout(() => scope.URL.revokeObjectURL(url), 1000);
+        lastDownload = lines;
+        if (review.hasUnsaved()) status.textContent = 'Downloaded with your current edits.';
+      } catch (error) { reportInvalid(error); }
+    }
+    download.addEventListener('click', downloadCurrent);
+    el('review-download').addEventListener('click', downloadCurrent);
+    resume.addEventListener('click', () => {
+      if (!saved || busy || !mayReplace()) return;
+      try { onResume(saved); }
+      catch { el('saved-draft-name').textContent = 'This saved review could not be opened.'; }
+    });
+    remove.addEventListener('click', async () => {
+      if (!saved || busy || !scope.confirm('Remove the saved review of ' + exportName(saved) + ' from this browser?')) return;
+      busy = true; updateButtons();
+      try {
+        await store.clear(saved.revision);
+        if (sameSource(current?.item, saved)) { stored = false; status.textContent = 'Saved copy removed. The open review is still available.'; }
+        showSaved(null);
+      } catch (error) {
+        if (!await refreshAfterConflict(error)) el('saved-draft-name').textContent = 'Could not remove the saved review. Try again.';
+      } finally {
+        busy = false; updateButtons();
+        if (!saved) { if (current) save.focus?.(); else el('subtitle-file').focus?.(); }
+      }
+    });
+    scope.addEventListener('beforeunload', event => {
+      if (needsProtection()) { event.preventDefault(); event.returnValue = ''; }
+    });
+    return {open, clear, mayReplace, get active() { return !!current; }};
+  }
+
   function init(scope) {
     const doc = scope.document;
     const el = id => doc.getElementById(id);
     const source = el('source-language'), target = el('target-language');
     const fileInput = el('subtitle-file'), button = el('translate'), cancel = el('cancel');
-    const progress = el('translation-progress'), info = el('translation-mode'), output = el('translation-output');
+    const progress = el('translation-progress'), info = el('translation-mode');
     const engine = scope.CueTranslationEngine;
     const nav = scope.navigator;
     const chrome = nav.userAgentData?.brands?.length
@@ -910,7 +1531,9 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     const preferred = (nav.languages || [nav.language || 'en']).map(base).find(lang => languageNames.has(lang));
     target.value = preferred || 'en';
 
-    let file, prepared, detected, detector, plan, task, result, encodingForExport;
+    let file, sourceText, prepared, detected, detector, plan, task, encodingForExport;
+    let lastSourceChoice = source.value, lastTargetChoice = target.value, lastEncoding = 'auto';
+    const workspace = resultWorkspace(scope, restoreDraft);
     let selection = 0, preflight = 0, targetChosen = false;
     function message(text, kind = '') {
       const node = el('translation-status');
@@ -927,9 +1550,9 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     function resetWork() {
       preflight++;
       if (task) { const old = task; task = null; old.controller.abort(); release(old); }
-      plan = null; result = null;
+      plan = null; workspace.clear();
       button.disabled = true; cancel.hidden = true; progress.hidden = true;
-      output.hidden = true; el('export').disabled = true; showMode(null);
+      showMode(null);
     }
     function stopDetector() {
       if (detector) { detector.controller.abort(); release(detector); detector = null; }
@@ -992,6 +1615,12 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       if (detector === current && !controller.signal.aborted) { detector = null; await preparePair(); }
     }
     async function chooseFile(selected, encoding = 'auto') {
+      if (!workspace.mayReplace()) {
+        fileInput.value = '';
+        el('file-encoding').value = lastEncoding;
+        return;
+      }
+      lastEncoding = encoding;
       const token = ++selection;
       resetWork(); stopDetector(); file = selected; prepared = null; detected = '';
       autoOption.textContent = 'Auto-detect';
@@ -1009,6 +1638,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         catch (error) { el('encoding-field').hidden = false; throw error; }
         encodingForExport = outputEncoding(bytes, encoding);
         prepared = scope.CueTranslationSrt.prepare(text);
+        sourceText = text;
         if (!prepared.units.length) throw Error('This subtitle has no dialogue to translate.');
         el('file-meta').textContent = prepared.cueCount.toLocaleString() + (prepared.cueCount === 1 ? ' cue' : ' cues');
         if (source.value) await preparePair();
@@ -1023,11 +1653,11 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       }
     }
     async function translate() {
-      if (!plan || !prepared || task) return;
+      if (!plan || !prepared || task || !workspace.mayReplace()) return;
       const current = {controller: new AbortController(), session: null};
       task = current; const signal = current.controller.signal;
       button.disabled = true; cancel.hidden = false; progress.hidden = false; progress.removeAttribute('value');
-      result = null; output.hidden = true; el('export').disabled = true;
+      workspace.clear();
       message('Preparing on-device translation…'); showMode(plan.mode);
       try {
         // start() must run inside the Translate click to authorize model setup.
@@ -1056,18 +1686,42 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           },
         });
         if (task !== current || signal.aborted) return;
-        const text = prepared.render(lines);
-        result = {text, encoding:encodingForExport, filename:file.name.replace(/\.srt$/i, '') + '.' + target.value + '.srt'};
-        el('result-file').textContent = result.filename;
+        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines:lines});
+        lastSourceChoice = source.value; lastTargetChoice = target.value;
         message('Translation complete. ' + prepared.cueCount.toLocaleString() +
           (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
-        el('export').disabled = false; output.hidden = false;
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
         release(current);
         if (task === current) { task = null; cancel.hidden = true; progress.hidden = true; button.disabled = !plan; }
       }
+    }
+
+    function restoreDraft(snapshot) {
+      const restored = scope.CueTranslationSrt.prepare(snapshot.sourceText);
+      restored.render(snapshot.generatedLines);
+      restored.render(snapshot.editedLines);
+      ++selection; stopDetector(); resetWork();
+      fileInput.value = '';
+      file = {name:snapshot.filename, arrayBuffer:() => subtitleBlob(snapshot.sourceText, snapshot.encoding).arrayBuffer()};
+      sourceText = snapshot.sourceText; prepared = restored; encodingForExport = snapshot.encoding;
+      detected = snapshot.sourceLanguage; source.value = '';
+      autoOption.textContent = 'Auto-detect · ' + (languageNames.get(base(detected)) || detected);
+      target.value = snapshot.targetLanguage; targetChosen = true;
+      lastSourceChoice = source.value; lastTargetChoice = target.value; lastEncoding = 'auto';
+      el('file-encoding').value = 'auto'; el('encoding-field').hidden = true;
+      el('file-name').textContent = file.name;
+      el('file-meta').textContent = prepared.cueCount.toLocaleString() + (prepared.cueCount === 1 ? ' cue' : ' cues');
+      workspace.open(prepared, snapshot, true);
+      message('Saved translation ready to review or download.', 'ok');
+      el('translation-review').focus?.();
+      if (!supported) return;
+      const request = preflight;
+      engine.plan(detected, target.value, scope).then(candidate => {
+        if (request === preflight && candidate.mode !== 'unavailable') { plan = candidate; button.disabled = false; }
+      }).catch(() => {});
     }
 
     if (!supported) {
@@ -1085,6 +1739,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       const selected = event.dataTransfer.files[0]; if (selected) return chooseFile(selected);
     });
     source.addEventListener('change', () => {
+      if (!workspace.mayReplace()) { source.value = lastSourceChoice; return; }
       resetWork(); stopDetector();
       if (source.value || detected) return preparePair();
       if (file && prepared) {
@@ -1092,6 +1747,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       }
     });
     target.addEventListener('change', () => {
+      if (!workspace.mayReplace()) { target.value = lastTargetChoice; return; }
       targetChosen = true;
       if (prepared && !source.value && !detected && detector) { resetWork(); return; }
       return preparePair();
@@ -1101,16 +1757,12 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       const retry = plan; resetWork(); plan = retry; button.disabled = !plan;
       message('Translation canceled. You can try again.');
     });
-    el('export').addEventListener('click', () => {
-      if (!result) return;
-      const url = scope.URL.createObjectURL(subtitleBlob(result.text, result.encoding));
-      const link = doc.createElement('a');
-      link.href = url; link.download = result.filename; doc.body.append(link); link.click(); link.remove();
-      scope.setTimeout(() => scope.URL.revokeObjectURL(url), 1000);
+    scope.addEventListener('pagehide', () => {
+      ++selection; stopDetector();
+      if (!workspace.active) resetWork();
     });
-    scope.addEventListener('pagehide', () => { ++selection; stopDetector(); resetWork(); });
     scope.addEventListener('pageshow', event => {
-      if (event.persisted && prepared) preparePair();
+      if (event.persisted && prepared && !workspace.active) preparePair();
     });
   }
 

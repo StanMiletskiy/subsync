@@ -19,8 +19,15 @@
   <main class="wrap translation-main">
     <div class="mast">
       <h1>Free AI Translation</h1>
-      <p>Translate SRT dialogue on your device. Timestamps, line breaks and formatting stay intact.</p>
+      <p>Translate SRT for free on your device. This feature uses Google's AI model built in your Google Chrome browser.</p>
     </div>
+    <section class="saved-draft" id="saved-draft" aria-labelledby="saved-draft-label" hidden>
+      <div><h2 id="saved-draft-label">Saved review</h2><p id="saved-draft-name" dir="auto"></p></div>
+      <div class="saved-draft-actions">
+        <button type="button" class="review-button" id="resume-draft">Resume review</button>
+        <button type="button" class="text-button" id="delete-draft">Remove saved copy</button>
+      </div>
+    </section>
     <section class="panel translation-panel" aria-labelledby="translation-heading">
       <h2 id="translation-heading">Translate a subtitle</h2>
       <div class="file-block">
@@ -51,17 +58,44 @@
       <p class="hint" id="translation-mode" hidden></p>
       <div id="translation-output" class="translation-output" hidden>
         <p id="result-file" dir="auto"></p>
-        <button type="button" class="export" id="export" disabled>Export SRT</button>
+        <div class="result-actions">
+          <button type="button" class="export" id="export" disabled>Download SRT</button>
+          <a href="#translation-review">Review &amp; edit</a>
+        </div>
       </div>
     </section>
+    <section class="panel translation-review" id="translation-review" aria-labelledby="review-heading" tabindex="-1" hidden>
+      <header class="review-header">
+        <h2 id="review-heading">Review translation</h2>
+        <div class="review-header-actions">
+          <button type="button" class="review-button" id="review-save">Save edits</button>
+          <button type="button" class="review-button" id="review-download">Download SRT</button>
+        </div>
+        <p class="review-status" id="review-status" tabindex="-1" role="status" aria-live="polite" aria-atomic="true"></p>
+      </header>
+      <p class="hint review-hint">Edit the translated dialogue. You can save one review in this browser.</p>
+      <div class="review-filters">
+        <label class="review-search-label" for="review-search">Search dialogue</label>
+        <input id="review-search" type="search" placeholder="Find original or translated text" autocomplete="off">
+      </div>
+      <div class="review-columns" aria-hidden="true"><span>Original</span><span>Translation</span></div>
+      <div id="review-rows"></div>
+      <nav class="review-pagination" aria-label="Subtitle cue pages">
+        <button type="button" class="review-button" id="review-prev" aria-label="Previous subtitle page">Previous</button>
+        <span id="review-page" aria-live="polite" aria-atomic="true"></span>
+        <button type="button" class="review-button" id="review-next" aria-label="Next subtitle page">Next</button>
+      </nav>
+    </section>
     <details class="help"><summary>About translation quality</summary>
-      <p>When Gemini Nano supports both languages, it uses nearby dialogue to translate in context. For English to Russian, Chrome translates from the original English. Check names, slang and how speakers address each other before publishing. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
+      <p>When Gemini Nano supports both languages, it uses nearby dialogue to translate in context. For English to Russian, Chrome translates from the original English. Check names, slang and how speakers address each other before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
     </details>
     <footer><span>Cueframe</span><a href="https://perfectintegers.com/subsync/">Sync subtitle timings</a></footer>
   </main>
   <script src="srt.js"></script>
   <script src="translation-srt.js"></script>
   <script src="translation-engine.js"></script>
+  <script src="translation-draft.js"></script>
+  <script src="translation-review.js"></script>
   <script src="translate-page.js"></script>
 </body>
 </html>

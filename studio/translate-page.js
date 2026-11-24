@@ -26,12 +26,144 @@
     for (let i = 0; i < text.length; i++) view.setUint16(2 * i, text.charCodeAt(i), encoding === 'utf-16le');
     return new Blob([data], {type});
   }
+  function resultWorkspace(scope, onResume) {
+    const doc = scope.document;
+    const el = id => doc.getElementById(id);
+    const save = el('review-save'), download = el('export'), status = el('review-status');
+    const strip = el('saved-draft'), resume = el('resume-draft'), remove = el('delete-draft');
+    const store = scope.CueTranslationDraft;
+    let current = null, saved = null, busy = false, stored = false, lastDownload = null;
+    const review = scope.CueTranslationReview.create(el('translation-review'), {onDirtyChange: dirty => {
+      status.dataset.kind = '';
+      status.textContent = dirty ? 'Unsaved edits.' : '';
+      updateButtons();
+    }});
+
+    function updateButtons() {
+      save.disabled = !current || busy || (stored && !review.hasUnsaved());
+      resume.disabled = remove.disabled = busy;
+    }
+    function showSaved(snapshot) {
+      saved = snapshot;
+      strip.hidden = !snapshot;
+      if (snapshot) el('saved-draft-name').textContent = exportName(snapshot);
+    }
+    function exportName(item) {
+      return item.filename.replace(/\.srt$/i, '') + '.' + item.targetLanguage + '.srt';
+    }
+    function sameSource(a, b) {
+      return a && b && a.filename === b.filename && a.sourceText === b.sourceText &&
+        a.sourceLanguage === b.sourceLanguage && a.targetLanguage === b.targetLanguage;
+    }
+    function needsProtection() {
+      if (!review.hasUnsaved()) return false;
+      return !lastDownload || review.getLines().some((line, i) => line !== lastDownload[i]);
+    }
+    function mayReplace() {
+      return !needsProtection() || scope.confirm('Discard your unsaved subtitle edits?');
+    }
+    function clear() {
+      current = null; stored = false; lastDownload = null;
+      review.clear();
+      el('translation-output').hidden = true; download.disabled = true;
+      status.dataset.kind = ''; status.textContent = ''; updateButtons();
+    }
+    function open(prepared, item, isSaved = false) {
+      const lines = item.editedLines || item.generatedLines;
+      prepared.render(lines);
+      current = {prepared, item}; stored = isSaved; lastDownload = null;
+      review.load(prepared, item.generatedLines, lines);
+      el('result-file').textContent = exportName(item);
+      el('translation-output').hidden = false; download.disabled = false;
+      status.dataset.kind = '';
+      status.textContent = isSaved ? 'Saved review restored.' : '';
+      updateButtons();
+    }
+    function reportInvalid(error) {
+      status.textContent = error.message || 'Check the edited dialogue and try again.';
+      status.dataset.kind = 'error';
+      if (!review.focusUnit(error.unitId) && !review.focusInvalid(error.cueNumber)) status.focus?.();
+    }
+    async function refreshAfterConflict(error) {
+      if (error?.name !== 'DraftConflictError') return false;
+      showSaved(await store.load().catch(() => null));
+      stored = false;
+      return true;
+    }
+    // An unavailable local database must never prevent reviewing or downloading.
+    const initialRead = store.load().then(showSaved, () => {});
+    save.addEventListener('click', async () => {
+      if (!current || busy) return;
+      const active = current, lines = review.getLines();
+      try { active.prepared.render(lines); } catch (error) { reportInvalid(error); return; }
+      busy = true; updateButtons();
+      try {
+        await initialRead;
+        if (active !== current) return;
+        if (saved && !sameSource(saved, active.item) &&
+            !scope.confirm('Replace the saved review of ' + exportName(saved) + ' with this subtitle?')) return;
+        const snapshot = await store.save({...active.item, editedLines:lines}, saved?.revision ?? null);
+        showSaved(snapshot);
+        if (active !== current) return;
+        stored = true;
+        review.markSaved(lines);
+        status.dataset.kind = '';
+        status.textContent = review.hasUnsaved() ? 'Saved. Newer edits are still unsaved.' : 'Edits saved in this browser.';
+      } catch (error) {
+        const conflict = await refreshAfterConflict(error);
+        if (active === current) {
+          status.dataset.kind = 'error';
+          status.textContent = conflict ? 'Another tab changed the saved review. Your edits are still here. Save again to replace that copy.'
+            : 'Could not save in this browser. You can still download the SRT.';
+        }
+      } finally { busy = false; updateButtons(); }
+    });
+    function downloadCurrent() {
+      if (!current) return;
+      const lines = review.getLines();
+      try {
+        const text = current.prepared.render(lines);
+        const url = scope.URL.createObjectURL(subtitleBlob(text, current.item.encoding));
+        const link = doc.createElement('a');
+        link.href = url; link.download = exportName(current.item); doc.body.append(link); link.click(); link.remove();
+        scope.setTimeout(() => scope.URL.revokeObjectURL(url), 1000);
+        lastDownload = lines;
+        if (review.hasUnsaved()) status.textContent = 'Downloaded with your current edits.';
+      } catch (error) { reportInvalid(error); }
+    }
+    download.addEventListener('click', downloadCurrent);
+    el('review-download').addEventListener('click', downloadCurrent);
+    resume.addEventListener('click', () => {
+      if (!saved || busy || !mayReplace()) return;
+      try { onResume(saved); }
+      catch { el('saved-draft-name').textContent = 'This saved review could not be opened.'; }
+    });
+    remove.addEventListener('click', async () => {
+      if (!saved || busy || !scope.confirm('Remove the saved review of ' + exportName(saved) + ' from this browser?')) return;
+      busy = true; updateButtons();
+      try {
+        await store.clear(saved.revision);
+        if (sameSource(current?.item, saved)) { stored = false; status.textContent = 'Saved copy removed. The open review is still available.'; }
+        showSaved(null);
+      } catch (error) {
+        if (!await refreshAfterConflict(error)) el('saved-draft-name').textContent = 'Could not remove the saved review. Try again.';
+      } finally {
+        busy = false; updateButtons();
+        if (!saved) { if (current) save.focus?.(); else el('subtitle-file').focus?.(); }
+      }
+    });
+    scope.addEventListener('beforeunload', event => {
+      if (needsProtection()) { event.preventDefault(); event.returnValue = ''; }
+    });
+    return {open, clear, mayReplace, get active() { return !!current; }};
+  }
+
   function init(scope) {
     const doc = scope.document;
     const el = id => doc.getElementById(id);
     const source = el('source-language'), target = el('target-language');
     const fileInput = el('subtitle-file'), button = el('translate'), cancel = el('cancel');
-    const progress = el('translation-progress'), info = el('translation-mode'), output = el('translation-output');
+    const progress = el('translation-progress'), info = el('translation-mode');
     const engine = scope.CueTranslationEngine;
     const nav = scope.navigator;
     const chrome = nav.userAgentData?.brands?.length
@@ -50,7 +182,9 @@
     const preferred = (nav.languages || [nav.language || 'en']).map(base).find(lang => languageNames.has(lang));
     target.value = preferred || 'en';
 
-    let file, prepared, detected, detector, plan, task, result, encodingForExport;
+    let file, sourceText, prepared, detected, detector, plan, task, encodingForExport;
+    let lastSourceChoice = source.value, lastTargetChoice = target.value, lastEncoding = 'auto';
+    const workspace = resultWorkspace(scope, restoreDraft);
     let selection = 0, preflight = 0, targetChosen = false;
     function message(text, kind = '') {
       const node = el('translation-status');
@@ -67,9 +201,9 @@
     function resetWork() {
       preflight++;
       if (task) { const old = task; task = null; old.controller.abort(); release(old); }
-      plan = null; result = null;
+      plan = null; workspace.clear();
       button.disabled = true; cancel.hidden = true; progress.hidden = true;
-      output.hidden = true; el('export').disabled = true; showMode(null);
+      showMode(null);
     }
     function stopDetector() {
       if (detector) { detector.controller.abort(); release(detector); detector = null; }
@@ -132,6 +266,12 @@
       if (detector === current && !controller.signal.aborted) { detector = null; await preparePair(); }
     }
     async function chooseFile(selected, encoding = 'auto') {
+      if (!workspace.mayReplace()) {
+        fileInput.value = '';
+        el('file-encoding').value = lastEncoding;
+        return;
+      }
+      lastEncoding = encoding;
       const token = ++selection;
       resetWork(); stopDetector(); file = selected; prepared = null; detected = '';
       autoOption.textContent = 'Auto-detect';
@@ -149,6 +289,7 @@
         catch (error) { el('encoding-field').hidden = false; throw error; }
         encodingForExport = outputEncoding(bytes, encoding);
         prepared = scope.CueTranslationSrt.prepare(text);
+        sourceText = text;
         if (!prepared.units.length) throw Error('This subtitle has no dialogue to translate.');
         el('file-meta').textContent = prepared.cueCount.toLocaleString() + (prepared.cueCount === 1 ? ' cue' : ' cues');
         if (source.value) await preparePair();
@@ -163,11 +304,11 @@
       }
     }
     async function translate() {
-      if (!plan || !prepared || task) return;
+      if (!plan || !prepared || task || !workspace.mayReplace()) return;
       const current = {controller: new AbortController(), session: null};
       task = current; const signal = current.controller.signal;
       button.disabled = true; cancel.hidden = false; progress.hidden = false; progress.removeAttribute('value');
-      result = null; output.hidden = true; el('export').disabled = true;
+      workspace.clear();
       message('Preparing on-device translation…'); showMode(plan.mode);
       try {
         // start() must run inside the Translate click to authorize model setup.
@@ -196,18 +337,42 @@
           },
         });
         if (task !== current || signal.aborted) return;
-        const text = prepared.render(lines);
-        result = {text, encoding:encodingForExport, filename:file.name.replace(/\.srt$/i, '') + '.' + target.value + '.srt'};
-        el('result-file').textContent = result.filename;
+        workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines:lines});
+        lastSourceChoice = source.value; lastTargetChoice = target.value;
         message('Translation complete. ' + prepared.cueCount.toLocaleString() +
           (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.', 'ok');
-        el('export').disabled = false; output.hidden = false;
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
         release(current);
         if (task === current) { task = null; cancel.hidden = true; progress.hidden = true; button.disabled = !plan; }
       }
+    }
+
+    function restoreDraft(snapshot) {
+      const restored = scope.CueTranslationSrt.prepare(snapshot.sourceText);
+      restored.render(snapshot.generatedLines);
+      restored.render(snapshot.editedLines);
+      ++selection; stopDetector(); resetWork();
+      fileInput.value = '';
+      file = {name:snapshot.filename, arrayBuffer:() => subtitleBlob(snapshot.sourceText, snapshot.encoding).arrayBuffer()};
+      sourceText = snapshot.sourceText; prepared = restored; encodingForExport = snapshot.encoding;
+      detected = snapshot.sourceLanguage; source.value = '';
+      autoOption.textContent = 'Auto-detect · ' + (languageNames.get(base(detected)) || detected);
+      target.value = snapshot.targetLanguage; targetChosen = true;
+      lastSourceChoice = source.value; lastTargetChoice = target.value; lastEncoding = 'auto';
+      el('file-encoding').value = 'auto'; el('encoding-field').hidden = true;
+      el('file-name').textContent = file.name;
+      el('file-meta').textContent = prepared.cueCount.toLocaleString() + (prepared.cueCount === 1 ? ' cue' : ' cues');
+      workspace.open(prepared, snapshot, true);
+      message('Saved translation ready to review or download.', 'ok');
+      el('translation-review').focus?.();
+      if (!supported) return;
+      const request = preflight;
+      engine.plan(detected, target.value, scope).then(candidate => {
+        if (request === preflight && candidate.mode !== 'unavailable') { plan = candidate; button.disabled = false; }
+      }).catch(() => {});
     }
 
     if (!supported) {
@@ -225,6 +390,7 @@
       const selected = event.dataTransfer.files[0]; if (selected) return chooseFile(selected);
     });
     source.addEventListener('change', () => {
+      if (!workspace.mayReplace()) { source.value = lastSourceChoice; return; }
       resetWork(); stopDetector();
       if (source.value || detected) return preparePair();
       if (file && prepared) {
@@ -232,6 +398,7 @@
       }
     });
     target.addEventListener('change', () => {
+      if (!workspace.mayReplace()) { target.value = lastTargetChoice; return; }
       targetChosen = true;
       if (prepared && !source.value && !detected && detector) { resetWork(); return; }
       return preparePair();
@@ -241,16 +408,12 @@
       const retry = plan; resetWork(); plan = retry; button.disabled = !plan;
       message('Translation canceled. You can try again.');
     });
-    el('export').addEventListener('click', () => {
-      if (!result) return;
-      const url = scope.URL.createObjectURL(subtitleBlob(result.text, result.encoding));
-      const link = doc.createElement('a');
-      link.href = url; link.download = result.filename; doc.body.append(link); link.click(); link.remove();
-      scope.setTimeout(() => scope.URL.revokeObjectURL(url), 1000);
+    scope.addEventListener('pagehide', () => {
+      ++selection; stopDetector();
+      if (!workspace.active) resetWork();
     });
-    scope.addEventListener('pagehide', () => { ++selection; stopDetector(); resetWork(); });
     scope.addEventListener('pageshow', event => {
-      if (event.persisted && prepared) preparePair();
+      if (event.persisted && prepared && !workspace.active) preparePair();
     });
   }
 

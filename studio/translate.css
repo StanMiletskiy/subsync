@@ -1,6 +1,6 @@
 .translation-page .topbar a { color: #e0ecdf; font-size: .9rem; text-underline-offset: .22em; }
 .translation-page .topbar a:hover { color: var(--accent); }
-.translation-main { max-width: 800px; }
+.translation-main { max-width: 1100px; }
 .translation-panel { padding: clamp(18px, 4vw, 32px); }
 .translation-panel .file-block { margin-top: 16px; }
 .translation-panel .dropzone { min-height: 88px; }
@@ -19,3 +19,88 @@
 .translation-output p { min-width: 0; overflow-wrap: anywhere; font-size: .88rem; color: var(--muted); }
 .translation-main footer a { color: inherit; text-underline-offset: .2em; }
 @media (max-width: 430px) { .language-pair { grid-template-columns: 1fr; gap: 10px; } .translation-main .mast h1 { font-size: clamp(2.45rem, 10vw, 3.2rem); } }
+
+.translation-main > :not(.translation-review) { max-width: 800px; margin-inline: auto; }
+.saved-draft, .result-actions, .saved-draft-actions, .review-header, .review-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+}
+.saved-draft { flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; padding: 14px 18px; background: #e8eee4; border: 1px solid var(--line); border-radius: 9px; }
+.saved-draft h2 { font-size: .93rem; letter-spacing: -.015em; }
+.saved-draft p { overflow-wrap: anywhere; color: var(--muted); font-size: .86rem; }
+.saved-draft-actions, .result-actions { flex-wrap: wrap; }
+.result-actions a { color: #28583d; font-size: .91rem; font-weight: 600; text-underline-offset: .2em; }
+.translation-review { margin: 24px 0 0; padding: clamp(17px, 3vw, 30px); scroll-margin-top: 12px; }
+.translation-review:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.review-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 0 12px; padding-block: 7px; background: var(--white);
+}
+.review-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.review-hint { margin-top: 4px; }
+.review-header .review-status { grid-column: 1 / -1; }
+.review-header .review-status:empty { display: none; }
+.review-cue.is-edited .review-number { color: #286047; }
+.review-edited { padding: 0 5px; border: 1px solid #cadcc8; border-radius: 4px; color: #2d5d40; background: #eff5e9; font: 600 .7rem/1.55 system-ui, sans-serif; }
+.review-edited[hidden] { display: none; }
+@media (min-height: 610px) and (min-width: 520px), (min-height: 760px) and (max-width: 519px) {
+  .review-header { position: sticky; top: 0; z-index: 2; padding-block: 9px; border-bottom: 1px solid var(--line); }
+  .translation-review :is(input, textarea, .review-time, #review-prev, #review-next) { scroll-margin-block-start: 6.5rem; }
+}
+@media (max-width: 519px) {
+  .review-header { grid-template-columns: minmax(0, 1fr); }
+  .review-header-actions { margin-top: 7px; }
+  .translation-review :is(input, textarea, .review-time, #review-prev, #review-next) { scroll-margin-block-start: 9rem; }
+}
+.review-button {
+  min-height: 38px; padding: 7px 13px; border: 1px solid #a6b5aa; border-radius: 6px;
+  background: var(--white); color: #284c3d; font-size: .88rem;
+}
+.review-button:hover:enabled { background: #eaf2e4; border-color: #75917d; }
+#review-save { background: #eaf2e2; border-color: #adbd9f; }
+#review-save:hover:enabled { background: #deebd5; }
+.review-status { font-size: .86rem; color: var(--muted); overflow-wrap: anywhere; }
+.review-status:not(:empty) { margin-top: 8px; }
+.review-status[data-kind="error"] { color: #903215; }
+.review-filters { margin: 18px 0; }
+.review-search-label { display: block; margin-bottom: 4px; font-size: .86rem; font-weight: 650; }
+#review-search {
+  width: min(100%, 450px); min-height: 39px; padding: 7px 11px;
+  color: var(--ink); background: var(--white); border: 1px solid #a6b5aa; border-radius: 6px;
+}
+.review-cue, .review-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(16px, 3vw, 36px); }
+.review-columns { padding: 8px 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--muted); background: #f1f5ee; font-size: .84rem; font-weight: 650; }
+.review-cue { padding: 12px 10px 15px; row-gap: 5px; border-bottom: 1px solid var(--line); }
+.review-time { grid-column: 1 / -1; margin: 0; color: var(--muted); font: .75rem/1.5 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.review-original, .review-translation { min-width: 0; overflow-wrap: anywhere; }
+.review-original { white-space: pre-wrap; padding-block: 5px; }
+.review-translation :is(input, textarea) {
+  max-width: 100%; min-width: 0; padding: 4px 7px; color: var(--ink); background: white;
+  border: 1px solid #b6c5b8; border-radius: 5px; font: inherit; line-height: 1.4;
+}
+.review-time { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.review-number { color: #354d40; font-weight: 650; }
+.review-translation .review-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px; }
+.review-translation .review-line + .review-line { margin-top: 4px; }
+.review-translation .review-literal { white-space: pre-wrap; }
+.review-translation textarea { width: 100%; min-height: 2.25rem; resize: vertical; }
+.review-translation .review-line textarea { flex: 1 1 12ch; width: auto; field-sizing: content; }
+.review-translation :is(input, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.review-pagination { justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+#review-page { color: var(--muted); font-size: .86rem; text-align: center; font-variant-numeric: tabular-nums; }
+@media (max-width: 650px) {
+  .review-columns { display: none; }
+  .review-cue { grid-template-columns: minmax(0, 1fr); padding: 14px 0; row-gap: 8px; }
+  .review-cue:first-child { border-top: 1px solid var(--line); }
+  .review-time { grid-column: auto; }
+  .review-original { padding-block: 0; }
+  .review-original::before, .review-translation::before { display: block; margin-bottom: 4px; color: var(--muted); font-size: .77rem; font-weight: 650; }
+  .review-original::before { content: "Original"; }
+  .review-translation::before { content: "Translation"; }
+}
+@media (max-width: 430px) {
+  .saved-draft { padding: 13px; }
+  .review-pagination { justify-content: space-between; gap: 8px; }
+  .review-pagination .review-button { padding-inline: 9px; }
+}

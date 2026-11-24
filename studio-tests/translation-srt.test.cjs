@@ -92,3 +92,54 @@ test('rejects newly introduced speaker metadata or structural codes while preser
   assert.throws(() => p.render(['Only one word.']),/incomplete/);
   assert.equal(p.render(['Yes.','No.']),original.replace('Hello friend.','Yes.').replace('Goodbye.','No.'));
 });
+
+test('review exposes every cue, its exact metadata and only the writable text within each physical line', () => {
+  const firstTiming = '  0:00:01.50  --> 00:00:04,750  X1:31';
+  const original = '\uFEFF 009 \r\n' + firstTiming + '\r\n—  <i>Café &amp; thé</i> ♪\r\n\t(Спасибо!)\t\r\n\r\n' +
+    '00:00:04,850 --> 00:00:06,500\n{\\an8}123♪\n\n' +
+    'A09\r00:00:06,700 --> 00:00:08,000';
+  const p = prepare(original);
+  assert.equal(p.cues.length, p.cueCount);
+  assert.deepEqual(p.cues[0], {
+    number:1, identifier:' 009 ', timing:firstTiming, original:'—  <i>Café &amp; thé</i> ♪\r\n\t(Спасибо!)\t',
+    lines:[
+      [{text:'—  <i>',unitId:null},{text:'Café & thé',unitId:0},{text:'</i> ♪',unitId:null}],
+      [{text:'\t',unitId:null},{text:'(Спасибо!)',unitId:1},{text:'\t',unitId:null}],
+    ],
+  });
+  assert.deepEqual(p.cues[1], {
+    number:2, identifier:null, timing:'00:00:04,850 --> 00:00:06,500',original:'{\\an8}123♪',
+    lines:[[{text:'{\\an8}123♪',unitId:null}]],
+  });
+  assert.deepEqual(p.cues[2], {number:3,identifier:'A09',timing:'00:00:06,700 --> 00:00:08,000',original:'',lines:[]});
+  const values = p.units.map(unit => unit.text);
+  values[p.cues[0].lines[0][1].unitId] = 'Кофе и чай';
+  assert.equal(p.render(values), original.replace('Café &amp; thé', 'Кофе и чай'));
+});
+
+test('review distinguishes an absent identifier from duplicate identifiers and maps repeated text independently', () => {
+  const original = '\uFEFF00:00:00,100 --> 00:00:01,000\nはい！\n\n01\n00:00:01,100 --> 00:00:02,000\n[はい！]\n\n' +
+    '01\n00:00:02,100 --> 00:00:03,000\n— はい！';
+  const p = prepare(original);
+  assert.deepEqual(p.cues.map(c=>c.identifier),[null,'01','01']);
+  assert.deepEqual(p.cues.map(c=>c.number),[1,2,3]);
+  assert.deepEqual(p.cues[0].lines,[[{text:'はい！',unitId:0}]]);
+  assert.deepEqual(p.cues[1].lines,[[{text:'[',unitId:null},{text:'はい！',unitId:1},{text:']',unitId:null}]]);
+  assert.deepEqual(p.cues[2].lines,[[{text:'— ',unitId:null},{text:'はい！',unitId:2}]]);
+  assert.equal(p.render(['Да!','Точно!','Конечно!']),original.replace('はい！','Да!').replace('はい！','Точно!').replace('はい！','Конечно!'));
+});
+
+test('save errors identify the source cue and text field across arbitrarily numbered cues', () => {
+  const source = Array.from({length:14}, (_,i) => 'same-id\n00:00:00,100 --> 00:00:01,000\n' +
+    'First line.\n<i>Later line.</i>').join('\n\n');
+  const p = prepare(source);
+  const values = p.units.map(u=>'Bonjour.');
+  assert.equal(p.cues[12].lines[1][1].unitId,25);
+  for (const bad of ['', '{\\pos(2,3)}oops','[added caption]','♪ extra']) {
+    values[25] = bad;
+    assert.throws(() => p.render(values), error => error.cueNumber === 13 && error.unitId === 25 &&
+      (!bad || bad.startsWith('{') || error.message.includes('formatting')));
+  }
+  values[25] = 'Au revoir.';
+  assert.doesNotThrow(() => p.render(values));
+});
