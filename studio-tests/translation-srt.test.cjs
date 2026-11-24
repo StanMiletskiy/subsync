@@ -7,7 +7,7 @@ const {parse,decode} = require('../studio/srt');
 test('one text unit per physical line; preserve cue controls, EOLs, BOM, styling and offsets', () => {
   const original = '\uFEFFcue-9\r\n00:00:01.5 --> 00:00:03.80 position:40%\r\n<i>- Tell me\r\nwhere you went.</i>\r\n—   Home!\r\n\r\n77\n00:00:04,000 --> 00:00:05,000\n{\\an8}[Door shuts]\n';
   const prepared = prepare(original);
-  assert.deepEqual(prepared.units, [
+  assert.deepEqual(prepared.units.map(({phrase,...unit})=>unit), [
     {id:0,cue:1,line:original.indexOf('<i>'),text:'Tell me'},
     {id:1,cue:1,line:original.indexOf('where'),text:'where you went.'},
     {id:2,cue:1,line:original.indexOf('—'),text:'Home!'},

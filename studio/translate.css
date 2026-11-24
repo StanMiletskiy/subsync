@@ -30,7 +30,6 @@
 .saved-draft h2 { font-size: .93rem; letter-spacing: -.015em; }
 .saved-draft p { overflow-wrap: anywhere; color: var(--muted); font-size: .86rem; }
 .saved-draft-actions, .result-actions { flex-wrap: wrap; }
-.result-actions a { color: #28583d; font-size: .91rem; font-weight: 600; text-underline-offset: .2em; }
 .translation-review { margin: 24px 0 0; padding: clamp(17px, 3vw, 30px); scroll-margin-top: 12px; }
 .translation-review:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .review-header {

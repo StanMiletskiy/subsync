@@ -17,7 +17,10 @@ class Element {
   append(node) { this.options.push(node); }
   addEventListener(type, fn) { this.handlers[type] = fn; }
   fire(type, event = {}) { return this.handlers[type]?.(event); }
+  setAttribute(key, value) { this[key] = value; }
   removeAttribute(key) { delete this[key]; }
+  focus() { this.focusCount = (this.focusCount || 0) + 1; }
+  scrollIntoView() { this.scrollCount = (this.scrollCount || 0) + 1; }
   click() { this.fire('click'); }
   remove() {}
 }
@@ -53,6 +56,7 @@ function editingReview(onDirtyChange) {
   }
   return {
     load(prepared, generated, edited = generated) {
+      this.loadCount = (this.loadCount || 0) + 1;
       assert.equal(edited.length, prepared.units.length);
       replace(edited);
     },
@@ -66,7 +70,7 @@ function editingReview(onDirtyChange) {
   };
 }
 function setup({detected = 'en', engine = {}, chrome = true, hasDetector = true, locale = 'en',
-  draft = memoryDraft(), confirm = () => false} = {}) {
+  draft = memoryDraft(), confirm = () => false, hash = ''} = {}) {
   const ids = Object.fromEntries([...template.matchAll(/ id="([^"]+)"/g)].map(m => [m[1], new Element()]));
   const source = ids['source-language'];
   source.append(new Element());
@@ -82,7 +86,7 @@ function setup({detected = 'en', engine = {}, chrome = true, hasDetector = true,
     ...engine,
   };
   const scope = {
-    document:doc, navigator:{languages:[locale],userAgent:'Mozilla Chrome/158.0',userAgentData:{brands:[{brand:chrome?'Google Chrome':'Chromium'}]}},
+    document:doc, location:{hash}, navigator:{languages:[locale],userAgent:'Mozilla Chrome/158.0',userAgentData:{brands:[{brand:chrome?'Google Chrome':'Chromium'}]}},
     Translator:{create() {}}, CueTranslationEngine:driver, SyncSrt, CueTranslationSrt,
     CueTranslationReview:{create(section, {onDirtyChange}) { return state.review = editingReview(onDirtyChange); }},
     CueTranslationDraft:draft,
@@ -180,6 +184,7 @@ test('download includes current unsaved dialogue and preserves protected subtitl
   const {ids, choose, state, draft} = setup();
   await choose('episode.srt', styledSubtitle);
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Buenos días.');
   assert.equal(state.review.hasUnsaved(), true);
   assert.equal(ids['review-save'].disabled, false);
@@ -196,6 +201,7 @@ test('explicit save restores the edited SRT after reload without reloading the s
   const old = setup({draft});
   await old.choose('episode.srt', styledSubtitle);
   await old.ids.translate.fire('click');
+  old.ids['review-open'].click();
   old.state.review.edit(1, 'Adiós.');
   await old.ids['review-save'].fire('click');
   assert.equal(draft.writes, 1);
@@ -209,6 +215,9 @@ test('explicit save restores the edited SRT after reload without reloading the s
   assert.equal(resumed.ids['saved-draft'].hidden, false);
   resumed.ids['resume-draft'].click();
   assert.equal(resumed.ids['translation-output'].hidden, false);
+  assert.equal(resumed.ids['translation-review'].hidden, true);
+  assert.equal(resumed.state.review.loadCount, undefined);
+  resumed.ids['review-open'].click();
   assert.deepEqual(resumed.state.review.getLines(), draft.record.editedLines);
   resumed.ids.export.click();
   assert.equal(SyncSrt.decode(await resumed.state.blob.arrayBuffer()), styledSubtitle.replace('Hello!', '¡Hola!').replace('Bye!', 'Adiós.'));
@@ -223,6 +232,7 @@ test('invalid edits cannot save or export and a quota failure preserves both the
   const {ids, choose, draft, state} = setup();
   await choose();
   await ids.translate.fire('click');
+  ids['review-open'].click();
   await ids['review-save'].fire('click');
   state.review.edit(0, '');
   ids.export.click();
@@ -246,6 +256,7 @@ test('changing files or target and retrying translation preserve unsaved edits w
   const {ids, choose, select, state,draft} = setup();
   await choose();
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Revisado.');
   let protectedOnClose = false;
   state.listeners.beforeunload({preventDefault() { protectedOnClose = true; }});
@@ -266,6 +277,7 @@ test('a pending save captures the clicked revision and keeps later edits dirty',
   draft.beforeCommit = () => { entered.resolve(); return finish.promise; };
   await choose();
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Primera edición.');
   const saving = ids['review-save'].fire('click');
   await entered.promise;
@@ -285,11 +297,13 @@ test('a pending save for a previous file cannot mark an unrelated review as save
   draft.beforeCommit = () => { entered.resolve(); return finish.promise; };
   await choose('first.srt');
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Primera edición.');
   const saving = ids['review-save'].fire('click');
   await entered.promise;
   await choose('second.srt');
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Nueva película.');
   finish.resolve(); await saving;
   assert.equal(draft.record.filename, 'first.srt');
@@ -305,6 +319,7 @@ test('a save from a second tab cannot silently overwrite newer dialogue, and the
   const first = setup({draft}), second = setup({draft});
   await Promise.all([first.choose(), second.choose()]);
   await Promise.all([first.ids.translate.fire('click'), second.ids.translate.fire('click')]);
+  first.ids['review-open'].click(); second.ids['review-open'].click();
   first.state.review.edit(0, 'Edición guardada.');
   await first.ids['review-save'].fire('click');
   second.state.review.edit(0, 'Mi otra edición.');
@@ -322,9 +337,11 @@ test('declining to replace another subtitle’s saved review keeps that saved co
   const {state, ids, choose, draft} = setup();
   await choose('first.srt');
   await ids.translate.fire('click');
+  ids['review-open'].click();
   await ids['review-save'].fire('click');
   await choose('second.srt');
   await ids.translate.fire('click');
+  ids['review-open'].click();
   state.review.edit(0, 'Una revisión.');
   await ids['review-save'].fire('click');
   assert.match(state.confirmations.at(-1), /first\.es\.srt/);
@@ -343,6 +360,7 @@ test('newly generated dialogue is cleaned before review, while manual edits stay
   const {state, ids, choose, draft} = setup({engine:generatedResult(['— ¡Hola!'])});
   await choose();
   await ids.translate.fire('click');
+  ids['review-open'].click();
   assert.deepEqual(state.review.getLines(), ['¡Hola!']);
   ids.export.click();
   assert.equal(await state.blob.text(), subtitle.replace('Hello!', '¡Hola!'));
@@ -354,7 +372,7 @@ test('newly generated dialogue is cleaned before review, while manual edits stay
   assert.deepEqual(state.review.getLines(), ['— Mi edición.']);
 });
 
-test('one invalid generated fragment opens the complete review; correcting it can save, reload and export without rerunning', async () => {
+test('one invalid generated fragment leaves review collapsed until requested and can then be corrected without rerunning', async () => {
   const source = subtitle + '\r\n8\r\n00:00:03,000 --> 00:00:04,200\r\nSecond line.\r\n' +
     '\r\n9\r\n00:00:04,300 --> 00:00:05,600\r\nThird line.\r\n';
   const invalid = '00:00:01,010 --> 00:00:03,200';
@@ -363,9 +381,14 @@ test('one invalid generated fragment opens the complete review; correcting it ca
   await choose('full.srt',source);
   await ids.translate.fire('click');
   assert.equal(ids['translation-output'].hidden, false);
+  assert.equal(ids['translation-review'].hidden, true);
+  assert.equal(ids.export.disabled, true);
+  assert.equal(state.review.focusedUnit, undefined);
+  assert.match(ids['translation-status'].textContent, /Review & edit.*cue 2/i);
+  ids['review-open'].click();
+  assert.equal(ids['translation-review'].hidden, false);
   assert.equal(state.review.focusedUnit, 1);
   assert.deepEqual(state.review.getLines(), ['¡Hola!', invalid, 'Tercera línea.']);
-  assert.match(ids['translation-status'].textContent, /highlighted dialogue/i);
   assert.match(ids['review-status'].textContent, /cue 2/i);
   ids.export.click(); await ids['review-save'].fire('click');
   assert.equal(state.blob, undefined); assert.equal(draft.writes, 0);
@@ -392,4 +415,33 @@ test('a truncated model result cannot be offered as a complete review or downloa
   assert.equal(ids.export.disabled, true);
   ids.export.click(); await ids['review-save'].fire('click');
   assert.equal(state.blob, undefined); assert.equal(draft.writes, 0);
+});
+
+test('Review & edit is an explicit action even on a bookmarked editor fragment; direct download never mounts it', async () => {
+  assert.match(template, /<section\b[^>]*id="translation-review"[^>]*\bhidden\b/);
+  assert.match(template, /<button\b[^>]*id="review-open"[^>]*aria-expanded="false"/);
+  assert.doesNotMatch(template, /href="#translation-review"/);
+  const {state, ids, choose} = setup({hash:'#translation-review', confirm:() => true});
+  await choose();
+  await ids.translate.fire('click');
+  assert.equal(ids['translation-review'].hidden, true);
+  assert.equal(ids['review-open']['aria-expanded'], 'false');
+  ids.export.click();
+  assert.ok(state.blob);
+  assert.equal(state.review.loadCount, undefined);
+  assert.equal(ids['translation-review'].hidden, true);
+  ids['review-open'].click();
+  assert.equal(ids['review-open']['aria-expanded'], 'true');
+  assert.equal(ids['translation-review'].hidden, false);
+  assert.equal(ids['review-heading'].focusCount, 1);
+  assert.equal(ids['review-heading'].scrollCount, 1);
+  state.review.edit(0, 'Revisado.');
+  ids['review-open'].click();
+  assert.deepEqual(state.review.getLines(), ['Revisado.']);
+  assert.equal(state.review.loadCount, 1);
+  await choose('new.srt');
+  await ids.translate.fire('click');
+  assert.equal(ids['translation-review'].hidden, true);
+  assert.equal(ids['review-open']['aria-expanded'], 'false');
+  assert.equal(state.review.loadCount, 1);
 });

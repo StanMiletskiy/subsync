@@ -245,36 +245,187 @@ test('separate physical lines in a multi-speaker cue get individual translation 
   engine.destroy();
 });
 
-test('uses local context only for unfinished pieces of a single physical line', async () => {
-  const source = [
-    {id:0,cue:1,line:20,text:'I still have'}, {id:1,cue:1,line:20,text:'3 tickets.'},
-    {id:2,cue:1,line:20,text:'Come along.'}, {id:3,cue:2,line:90,text:'No.'},
-  ];
+const {prepare} = require('../studio/translation-srt');
+
+function title(bodies) {
+  return prepare(bodies.map((body, i) => {
+    const ticks = ms => '00:00:' + String(Math.floor(ms / 1000)).padStart(2,'0') + ',' + String(ms % 1000).padStart(3,'0');
+    return (i + 1) + '\n' + ticks(1800 * i) + ' --> ' + ticks(1800 * i + 1600) + '\n' + body;
+  }).join('\n\n'));
+}
+
+function dictionary(pairs, calls) {
+  return () => ({async translate(source) {
+    calls.push(source);
+    if (!Object.hasOwn(pairs, source)) throw Error('Unexpected native request: ' + source);
+    return pairs[source];
+  }, destroy() {}});
+}
+
+test('every runtime mode translates one intact utterance across wrapped lines and continuing cues', async () => {
+  const srt = title(['Can you give me\na hand with the','suitcase?', 'Good night.']);
+  const source = 'Can you give me a hand with the suitcase?';
+  for (const [from, to, mode, complete, farewell] of [
+    ['en','ru','standard','Поможешь мне с этим чемоданом?','Доброй ночи.'],
+    ['en','es','context','¿Me ayudas con la maleta?', 'Buenas noches.'],
+    ['fr','es','review','¿Me ayudas con la maleta?', 'Buenas noches.'],
+  ]) {
+    const calls = [], results = {[source]:complete, 'Good night.':farewell};
+    const env = environment({makeNative:dictionary(results,calls), generate:batch =>
+      JSON.stringify(batch.requested.map(({id,text}) => ({id,text:results[text] ?? text})))});
+    const engine = await start(await plan(from,to,env.scope),{scope:env.scope});
+    const progress = [];
+    const lines = await engine.translate(srt.units,{onProgress:(...record) => progress.push(record)});
+    assert.equal(engine.mode,mode);
+    assert.equal(lines.slice(0,3).join(' '),complete);
+    assert.ok(lines.every(line=>line.trim() && !line.includes('\n')));
+    assert.equal(lines[3],farewell);
+    assert.match(srt.render(lines),/00:00:01,800 --> 00:00:03,400/);
+    assert.deepEqual(progress.at(-1),[4,4]);
+    assert.deepEqual(calls, mode === 'context' ? [] : [source, 'Good night.']);
+    assert.equal(engine.contextStats.joinedPhrases,1);
+    assert.equal(engine.contextStats.splitFallbacks,0);
+    engine.destroy();
+  }
+});
+
+const background = ['Come in.', 'Please wait.', 'No.', 'Good night.', 'Bye.', 'Fine.', 'Still here?', 'Oh.'];
+function film(reference, requested) { return [reference,...background,requested].map((text,id)=>({id,cue:id+1,text})); }
+const plainBackground = Object.fromEntries(background.map((text,i)=>[text,['Войдите.','Подождите.','Нет.','Доброй ночи.','До свидания.','Ладно.','Ещё здесь?','О.'][i]]));
+
+test('uses farther-film evidence in native translation with preserved paragraphs or a unique exact sentence anchor', async () => {
+  const a = 'We booked Driftwood Lodge for Sunday.', b = 'Driftwood Lodge is in sight.';
+  const ref = 'Мы забронировали гостиницу на воскресенье.', own = 'Виден Дрифтвуд.', contextual = 'Гостиница уже видна.';
+  for (const boundary of ['\n\n',' ']) {
+    const calls = [];
+    const pairs = {...plainBackground,[a]:ref,[b]:own,[a+'\n\n'+b]:ref+boundary+contextual};
+    const env = environment({makeNative:dictionary(pairs,calls)});
+    const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+    const output = await engine.translate(film(a,b));
+    assert.equal(output.at(-1),contextual);
+    assert.equal(output[0],ref);
+    assert.ok(calls.includes(a+'\n\n'+b));
+    assert.ok(engine.contextStats.nativeAccepted > 0);
+    assert.ok(!calls.some(input=>input.includes('[[')));
+    engine.destroy();
+  }
+});
+
+test('native paragraph checks reject reference name leaks, reversals, duplication, controls and shifted numbers', async () => {
+  const a = 'Driftwood Lodge belongs to Vera.', b = 'Did she sell Driftwood Lodge?';
+  const ref = 'Эта гостиница принадлежит Вере.', own = 'Она продала гостиницу?';
+  for (const bad of [
+    ref+'\n\nВере уже продали гостиницу?', ref+'\n\nВера продала гостиницу?', own+'\n\n'+ref, ref+'\n\n'+ref+' '+own,
+    ref+'\n\n[ [12] ] В зале 27 человек?', ref+'\n\n<i>Она уже продала гостиницу?</i>',
+    'Кто-то поменял адрес. '+own, ref+' '+ref+' '+own,
+  ]) {
+    const calls = [];
+    const env = environment({makeNative:dictionary({...plainBackground,[a]:ref,[b]:own,[a+'\n\n'+b]:bad},calls)});
+    const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+    assert.equal((await engine.translate(film(a,b))).at(-1),own,bad);
+    engine.destroy();
+  }
+});
+
+test('backs off repeated native paragraph collapse and keeps translating original phrases', async () => {
+  const first = ['Map Jasper Cabin.', 'Sell Orchard Farm.', 'Close Indigo Works.'];
+  const last = ['Jasper Cabin reopened.', 'Orchard Farm reopened.', 'Indigo Works reopened.'];
+  const records = [...first,...background,...last].map((text,id)=>({id,cue:id+1,text}));
   const calls = [];
-  const replies = {'I still have':'Мне ещё принадлежит','3 tickets.':'3 билета.',
-    'Come along.':'Пойдём.','No.':'Нет.'};
   const env = environment({makeNative:()=>({async translate(text) {
     calls.push(text);
-    return text.startsWith('[[')?'[[1]] У меня ещё есть\n[[2]] 3 билета.':replies[text];
-  }, destroy(){}})});
+    return text.includes('\n') ? 'Единое предложение без подтверждаемой границы.' : 'Готовый перевод.';
+  },destroy(){}})});
   const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
-  assert.deepEqual(await engine.translate(source), ['У меня ещё есть','3 билета.','Пойдём.','Нет.']);
-  assert.deepEqual(calls,['[[1]] I still have\n[[2]] 3 tickets.','Come along.','No.']);
+  const output = await engine.translate(records);
+  assert.equal(output.length,records.length);
+  assert.ok(calls.filter(x=>x.includes('\n')).length === 2);
+  assert.equal(engine.contextStats.nativeAccepted,0);
   engine.destroy();
 });
 
-test('damaged markers, shifted numbers and untranslated marked groups retry individual originals', async () => {
-  const source = [{id:0,cue:1,line:7,text:'Wait for 2'}, {id:1,cue:1,line:7,text:'more hours.'}];
-  for (const bad of ['[[1]] encore', '[[2]] heures [[1]] 2', '[[1]] attends [[2]] 2 heures de plus',
-    '[[1]] Wait for 2\n[[2]] more hours.']) {
-    const calls = [];
-    const env = environment({supported:[],makeNative:()=>({async translate(text) {
-      calls.push(text);
-      return text.startsWith('[[')?bad:text.includes('2')?'attends 2':'heures de plus.';
-    },destroy(){}})});
-    const engine = await start(await plan('en','fr',env.scope),{scope:env.scope});
-    assert.deepEqual(await engine.translate(source), ['attends 2', 'heures de plus.']);
-    assert.deepEqual(calls.slice(1), source.map(unit=>unit.text));
+test('direct Nano receives farther-film evidence; review prompts contain only the translated evidence', async () => {
+  const a = 'The caretaker lives at Driftwood Lodge.', b = 'Who bought Driftwood Lodge?';
+  const source = film(a,b);
+  for (const [from,mode] of [['en','context'],['fr','review']]) {
+    const es = source.map((s,i)=>'Traducción número '+i+'.');
+    const pairs = Object.fromEntries(source.map((s,i)=>[s.text,es[i]]));
+    const env = environment({makeNative:dictionary(pairs,[])});
+    const engine = await start(await plan(from,'es',env.scope),{scope:env.scope});
+    await engine.translate(source);
+    const hints = env.calls.prompts[0].batch.documentContext;
+    assert.ok(hints.related.length);
+    if (mode === 'context') assert.ok(hints.related.some(example=>example.source===b));
+    else {
+      assert.ok(hints.related.some(example=>example.translation===es.at(-1)));
+      assert.doesNotMatch(JSON.stringify(hints),/Driftwood/);
+    }
     engine.destroy();
   }
+});
+
+test('a genuinely indivisible target uses individual native recovery only for that phrase', async () => {
+  const source = title(['Without\na doubt.','Good evening.']);
+  const calls = [], pairs = {'Without a doubt.':'Несомненно.','Without':'Без','a doubt.':'сомнения.','Good evening.':'Добрый вечер.'};
+  const env = environment({makeNative:dictionary(pairs,calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const output = await engine.translate(source.units);
+  assert.deepEqual(output,['Без','сомнения.','Добрый вечер.']);
+  assert.deepEqual(calls,['Without a doubt.','Without','a doubt.','Good evening.']);
+  assert.equal(engine.contextStats.splitFallbacks,1);
+  engine.destroy();
+});
+
+test('incompatible cross-cue translations fall back by timing before individual fields', async () => {
+  const srt = title(['Without any\nlingering sense','of doubt.']);
+  const calls = [], pairs = {
+    'Without any lingering sense of doubt.':'Несомненно.',
+    'Without any lingering sense':'Без малейшего намёка',
+    'of doubt.':'на сомнение.',
+  };
+  const env = environment({makeNative:dictionary(pairs,calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const lines = await engine.translate(srt.units);
+  assert.deepEqual(calls,Object.keys(pairs));
+  assert.equal(lines.slice(0,2).join(' '),pairs['Without any lingering sense']);
+  assert.equal(lines.at(-1),'на сомнение.');
+  assert.equal(engine.contextStats.splitFallbacks,1);
+  engine.destroy();
+});
+
+test('a repeated exact exchange can reuse a previously accepted phrase on the native route', async () => {
+  const scene = ['Did the blue train arrive?', 'It has already left.', 'We should call the station.'];
+  const dataset = [...scene, ...background, ...scene].map((text,id)=>({id,cue:id+1,text}));
+  const calls = [], native = {...plainBackground,[scene[0]]:'Синий поезд прибыл?', [scene[1]]:'Он уже ушёл.',[scene[2]]:'Надо позвонить на станцию.'};
+  const env = environment({makeNative:dictionary(native,calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const lines = await engine.translate(dataset);
+  assert.equal(lines[1],lines.at(-2));
+  assert.equal(engine.contextStats.reused,1);
+  assert.equal(calls.filter(x=>x===scene[1]).length,1);
+  engine.destroy();
+});
+
+test('a near question can resolve a short reply when no farther-film evidence exists', async () => {
+  const a = 'Are you ready, Anna?', b = "I'm ready.";
+  const q = 'Анна, ты готова?', masculine = 'Я готов.', feminine = 'Я готова.';
+  const calls = [];
+  const env = environment({makeNative:dictionary({[a]:q,[b]:masculine,[a+'\n\n'+b]:q+' '+feminine},calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  assert.deepEqual(await engine.translate(title([a,b]).units),[q,feminine]);
+  assert.equal(engine.contextStats.nativeAccepted,1);
+  engine.destroy();
+});
+
+test('Nano-only translations can recover indivisible phrases without duplicating words or leaving empty fields', async () => {
+  const srt = title(['Without\na doubt.']);
+  const env = environment({native:false,generate:batch => {
+    const values = batch.documentContext.wholeUtterance ? ['Sin','duda.'] : ['Indudablemente.'];
+    return JSON.stringify(batch.requested.map(({id},i)=>({id,text:values[i]})));
+  }});
+  const engine = await start(await plan('en','es',env.scope),{scope:env.scope});
+  assert.deepEqual(await engine.translate(srt.units),['Sin','duda.']);
+  assert.equal(env.calls.prompts[1].batch.requested[0].minimumPieces,2);
+  assert.equal(env.calls.prompts[2].batch.documentContext.wholeUtterance,'Without a doubt.');
+  engine.destroy();
 });

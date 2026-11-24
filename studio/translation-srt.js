@@ -12,6 +12,28 @@
   const controls = new RegExp(speaker + '|' + tag +
     String.raw`|[\[\]]|[♪♫♬]+|\\[Nnh]| {2,}|\t+|[\u00a0\u2007\u202f]|&(?:nbsp|#160|#x0*a0);`, 'giu');
   const entities = {amp:'&', lt:'<', gt:'>', quot:'"', apos:"'"};
+  const markup = new RegExp(tag, 'iu');
+  const htmlTokens = new RegExp(html, 'giu');
+  const assOverrides = new RegExp(overrides, 'iu');
+  const simpleStyle = /^\s*(<(i|b|u|s|font)\b(?:\s+(?:[a-z]+\s*=\s*(?:"[^"<>]*"|'[^'<>]*'|[^\s<>"'=]+)))*\s*>)([^<>]*)<\/\2\s*>\s*$/iu;
+
+  function sharedStyle(text) {
+    if (assOverrides.test(text) || /[\[\]♪♫♬]|\\[Nnh]|[\u202a-\u202e\u2066-\u2069]/u.test(text)) return null;
+    if (!markup.test(text)) return /[<>]/u.test(text) ? null : '';
+    const envelope = segment => {
+      const match = simpleStyle.exec(segment);
+      if (!match) return null;
+      const attributes = match[1].matchAll(/\s+([a-z]+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu);
+      for (const attr of attributes) {
+        if (match[2].toLowerCase() !== 'font' || !/^(?:face|color|size)$/iu.test(attr[1])) return null;
+      }
+      return match[1];
+    };
+    const whole = envelope(text);
+    if (whole) return whole;
+    const styles = text.split(/\r\n|[\r\n]/).map(envelope);
+    return styles[0] && styles.every(style => style === styles[0]) ? styles[0] : null;
+  }
 
   function readable(text) {
     return text.replace(/&(amp|lt|gt|quot|apos);/gi, (_, name) => entities[name.toLowerCase()]);
@@ -132,6 +154,23 @@
         }
         if (cursor < lineEnd) fragments.push({text:parsed.text.slice(cursor, lineEnd), unitId:null});
         lines.push(fragments);
+      }
+      // A phrase may cross plain subtitle lines, but moving words between
+      // distinct style, position or speaker spans can change their meaning.
+      const style = sharedStyle(cue.text);
+      const afterArrow = timing.indexOf('-->') + 3;
+      const settings = timing.slice(timing.indexOf(cue.endToken, afterArrow) + cue.endToken.length).trim();
+      for (const [lineIndex, line] of lines.entries()) {
+        const editable = line.filter(part => part.unitId !== null);
+        const visible = part => part.unitId !== null ? part.text : part.text.replace(htmlTokens, '');
+        const plain = line.map(visible).join('').trim();
+        const turnStart = /^[-–—―](?=[ \t]|\p{L})/u.test(plain) ||
+          /^\p{L}[\p{L}\p{M}.'’ -]{0,28}[:：]/u.test(plain);
+        const isolated = style === null || editable.length !== 1 || /^[（(].*[）)]$/u.test(plain) ||
+          line.some(part => part.unitId === null && /[^\s\-–—―]/u.test(visible(part)));
+        for (const part of editable) {
+          units[part.unitId].phrase = {startMs:cue.start, endMs:cue.end, lineIndex, lineCount:lines.length, settings, style, turnStart, isolated};
+        }
       }
       return {number:index + 1, identifier, timing, original:cue.text, lines};
     });

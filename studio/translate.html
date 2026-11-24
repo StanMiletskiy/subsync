@@ -24,7 +24,7 @@
     <section class="saved-draft" id="saved-draft" aria-labelledby="saved-draft-label" hidden>
       <div><h2 id="saved-draft-label">Saved review</h2><p id="saved-draft-name" dir="auto"></p></div>
       <div class="saved-draft-actions">
-        <button type="button" class="review-button" id="resume-draft">Resume review</button>
+        <button type="button" class="review-button" id="resume-draft">Open saved translation</button>
         <button type="button" class="text-button" id="delete-draft">Remove saved copy</button>
       </div>
     </section>
@@ -60,13 +60,13 @@
         <p id="result-file" dir="auto"></p>
         <div class="result-actions">
           <button type="button" class="export" id="export" disabled>Download SRT</button>
-          <a href="#translation-review">Review &amp; edit</a>
+          <button type="button" class="text-button" id="review-open" aria-controls="translation-review" aria-expanded="false">Review &amp; edit</button>
         </div>
       </div>
     </section>
     <section class="panel translation-review" id="translation-review" aria-labelledby="review-heading" tabindex="-1" hidden>
       <header class="review-header">
-        <h2 id="review-heading">Review translation</h2>
+        <h2 id="review-heading" tabindex="-1">Review translation</h2>
         <div class="review-header-actions">
           <button type="button" class="review-button" id="review-save">Save edits</button>
           <button type="button" class="review-button" id="review-download">Download SRT</button>
@@ -87,12 +87,14 @@
       </nav>
     </section>
     <details class="help"><summary>About translation quality</summary>
-      <p>When Gemini Nano supports both languages, it uses nearby dialogue to translate in context. For English to Russian, Chrome translates from the original English. Check names, slang and how speakers address each other before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
+      <p>Cueframe joins lines that continue the same thought, translates the phrase and fits it back into the original subtitle lines. It indexes the whole file to find related dialogue, including later mentions of names and expressions. The context available to the model depends on the language pair. Review ambiguous speakers, idioms and scene changes before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
     </details>
     <footer><span>Cueframe</span><a href="https://perfectintegers.com/subsync/">Sync subtitle timings</a></footer>
   </main>
   <script src="srt.js"></script>
   <script src="translation-srt.js"></script>
+  <script src="translation-phrases.js"></script>
+  <script src="translation-context.js"></script>
   <script src="translation-engine.js"></script>
   <script src="translation-draft.js"></script>
   <script src="translation-review.js"></script>

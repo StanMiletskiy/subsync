@@ -8,9 +8,9 @@
     ['ko', 'Korean'], ['pt', 'Portuguese'], ['ru', 'Russian'], ['es', 'Spanish'], ['th', 'Thai'],
   ];
   const modes = {
-    context: 'Gemini Nano uses nearby dialogue for context.',
-    review: 'Gemini Nano edits the translated dialogue alongside nearby translated lines.',
-    standard: 'Chrome translates directly from the original dialogue.',
+    context: 'Gemini Nano translates phrases using nearby and related dialogue.',
+    review: 'Gemini Nano reviews translated phrases alongside related dialogue.',
+    standard: 'Chrome translates phrases from the original dialogue.',
   };
   function outputEncoding(bytes, selected) {
     const header = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2));
@@ -31,21 +31,28 @@
       (prepared.cueCount === 1 ? ' cue' : ' cues') + ' ready to export.';
   }
 
+  function repairMessage(error) {
+    const location = error.cueNumber ? 'cue ' + error.cueNumber : 'the flagged dialogue';
+    return 'Translation finished. Choose Review & edit to check ' + location + ' before downloading.';
+  }
+
   function resultWorkspace(scope, onResume) {
     const doc = scope.document;
     const el = id => doc.getElementById(id);
     const save = el('review-save'), download = el('export'), status = el('review-status');
     const strip = el('saved-draft'), resume = el('resume-draft'), remove = el('delete-draft');
+    const section = el('translation-review'), opener = el('review-open'), heading = el('review-heading');
     const store = scope.CueTranslationDraft;
     let current = null, saved = null, busy = false, stored = false, lastDownload = null;
-    const review = scope.CueTranslationReview.create(el('translation-review'), {onDirtyChange: dirty => {
+    const review = scope.CueTranslationReview.create(section, {onDirtyChange: dirty => {
       status.dataset.kind = '';
       status.textContent = dirty ? 'Unsaved edits.' : '';
       updateButtons();
     }});
 
     function updateButtons() {
-      save.disabled = !current || busy || (stored && !review.hasUnsaved());
+      save.disabled = !current?.reviewOpen || busy || (stored && !review.hasUnsaved());
+      download.disabled = !current || (!!current.issue && !current.reviewOpen);
       resume.disabled = remove.disabled = busy;
     }
     function showSaved(snapshot) {
@@ -69,21 +76,33 @@
     }
     function clear() {
       current = null; stored = false; lastDownload = null;
-      review.clear();
-      el('translation-output').hidden = true; download.disabled = true;
+      review.clear(); section.hidden = true; opener.setAttribute('aria-expanded', 'false');
+      el('translation-output').hidden = true;
       status.dataset.kind = ''; status.textContent = ''; updateButtons();
     }
     function open(prepared, item, isSaved = false, issue = null) {
-      const lines = item.editedLines || item.generatedLines;
-      review.load(prepared, item.generatedLines, lines);
-      current = {prepared, item, issue}; stored = isSaved; lastDownload = null;
+      current = {prepared, item, issue, reviewOpen:false}; stored = isSaved; lastDownload = null;
+      section.hidden = true; opener.setAttribute('aria-expanded', 'false');
       el('result-file').textContent = exportName(item);
-      el('translation-output').hidden = false; download.disabled = false;
+      el('translation-output').hidden = false;
       status.dataset.kind = '';
       status.textContent = isSaved ? 'Saved review restored.' : '';
       updateButtons();
-      if (issue) reportInvalid(issue);
     }
+    opener.addEventListener('click', () => {
+      if (!current) return;
+      if (!current.reviewOpen) {
+        const {item, prepared} = current;
+        review.load(prepared, item.generatedLines, item.editedLines || item.generatedLines);
+        current.reviewOpen = true;
+      }
+      section.hidden = false; opener.setAttribute('aria-expanded', 'true');
+      updateButtons();
+      heading.focus({preventScroll:true});
+      heading.scrollIntoView({block:'start'});
+      if (current.issue) reportInvalid(current.issue);
+    });
+
     function renderCurrent(active, lines) {
       const text = active.prepared.render(lines);
       if (active.issue) {
@@ -91,11 +110,18 @@
         const summary = el('translation-status');
         summary.textContent = completedMessage(active.prepared);
         summary.dataset.kind = 'ok';
-        status.textContent = ''; status.dataset.kind = '';
+        status.textContent = ''; status.dataset.kind = ''; updateButtons();
       }
       return text;
     }
     function reportInvalid(error) {
+      current.issue = error;
+      if (!current.reviewOpen) {
+        const summary = el('translation-status');
+        summary.textContent = repairMessage(error); summary.dataset.kind = 'error';
+        updateButtons();
+        return;
+      }
       status.textContent = error.message || 'Check the edited dialogue and try again.';
       status.dataset.kind = 'error';
       if (!review.focusUnit(error.unitId) && !review.focusInvalid(error.cueNumber)) status.focus?.();
@@ -109,7 +135,7 @@
     // An unavailable local database must never prevent reviewing or downloading.
     const initialRead = store.load().then(showSaved, () => {});
     save.addEventListener('click', async () => {
-      if (!current || busy) return;
+      if (!current?.reviewOpen || busy) return;
       const active = current, lines = review.getLines();
       try { renderCurrent(active, lines); } catch (error) { reportInvalid(error); return; }
       busy = true; updateButtons();
@@ -136,7 +162,7 @@
     });
     function downloadCurrent() {
       if (!current) return;
-      const lines = review.getLines();
+      const lines = current.reviewOpen ? review.getLines() : current.item.editedLines || current.item.generatedLines;
       try {
         const text = renderCurrent(current, lines);
         const url = scope.URL.createObjectURL(subtitleBlob(text, current.item.encoding));
@@ -365,8 +391,18 @@
               Array.from(generatedLines).some(line => typeof line !== 'string')) throw error;
           issue = error;
         }
+        const stats = session.contextStats;
+        if (stats) {
+          const notes = [modes[session.mode]];
+          const joined = stats.joinedPhrases - stats.splitFallbacks;
+          if (joined > 0) notes.push(joined.toLocaleString() + (joined === 1 ? ' phrase was' : ' phrases were') + ' translated across subtitle breaks.');
+          if (stats.nativeAccepted > 0) notes.push(stats.nativeAccepted.toLocaleString() + (stats.nativeAccepted === 1 ? ' phrase was' : ' phrases were') + ' translated with reference dialogue.');
+          if (stats.splitFallbacks > 0) notes.push(stats.splitFallbacks.toLocaleString() + (stats.splitFallbacks === 1 ? ' phrase needed' : ' phrases needed') + ' separate translations to fit the original lines.');
+          info.textContent = notes.join(' ');
+          info.hidden = false;
+        }
         lastSourceChoice = source.value; lastTargetChoice = target.value;
-        if (issue) message('Translation finished. Check the highlighted dialogue before saving or downloading.', 'error');
+        if (issue) message(repairMessage(issue), 'error');
         else message(completedMessage(prepared), 'ok');
         workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
           targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue);
@@ -398,7 +434,7 @@
       el('file-meta').textContent = prepared.cueCount.toLocaleString() + (prepared.cueCount === 1 ? ' cue' : ' cues');
       workspace.open(prepared, snapshot, true);
       message('Saved translation ready to review or download.', 'ok');
-      el('translation-review').focus?.();
+      el('export').focus?.();
       if (!supported) return;
       const request = preflight;
       engine.plan(detected, target.value, scope).then(candidate => {
