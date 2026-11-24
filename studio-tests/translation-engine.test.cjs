@@ -429,3 +429,77 @@ test('Nano-only translations can recover indivisible phrases without duplicating
   assert.equal(env.calls.prompts[2].batch.documentContext.wholeUtterance,'Without a doubt.');
   engine.destroy();
 });
+
+test('the native contrast check repairs a collapsed pair before fitting it to the original lines', async () => {
+  const subtitle = title(['Could they tell a carton\nfrom a packet?']);
+  const source = 'Could they tell a carton from a packet?';
+  const native = 'Могут ли они отличить пакет от пакета?';
+  const calls = [];
+  const env = environment({makeNative:dictionary({
+    [source]:native,
+    'Could they tell "a carton" from "a packet"?':'Могут ли они сказать "коробку" от "пакета"?',
+    'a carton':'коробка', 'a packet':'пакет',
+  }, calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const lines = await engine.translate(subtitle.units);
+  assert.equal(lines.join(' '), 'Могут ли они отличить коробку от пакета?');
+  assert.equal(lines.length, 2);
+  assert.equal(engine.contextStats.contrastRecovered, 1);
+  assert.deepEqual(engine.contextStats.contrastIssues, []);
+  assert.equal(calls[0], source);
+  engine.destroy();
+});
+
+test('a failed native contrast repair keeps the translation and reports only this run’s unresolved first unit', async () => {
+  const source = 'Could they tell a bat from a club?';
+  const native = 'Могут ли они отличить биту от биты?';
+  const cleanSource = 'Could they tell a lock from a key?';
+  const cleanNative = 'Могут ли они отличить замок от ключа?';
+  const calls = [];
+  const env = environment({makeNative:dictionary({[source]:native, [cleanSource]:cleanNative},calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const input = title(['Could they tell a bat\nfrom a club?']).units.map((unit,i)=>({...unit,id:17+i}));
+  const lines = await engine.translate(input);
+  assert.equal(lines.join(' '), native);
+  assert.ok(calls.length > 1);
+  assert.deepEqual(engine.contextStats.contrastIssues,[17]);
+  assert.equal(engine.contextStats.contrastRecovered,0);
+
+  calls.length = 0;
+  assert.deepEqual(await engine.translate([{id:29,cue:1,text:cleanSource}]), [cleanNative]);
+  assert.deepEqual(calls,[cleanSource]);
+  assert.deepEqual(engine.contextStats.contrastIssues,[]);
+  engine.destroy();
+});
+
+test('contrast review reflects the final rendering after a subtitle layout fallback', async () => {
+  const subtitle = title(['Could\nthey tell\na carton\nfrom a\npacket?']);
+  const source = 'Could they tell a carton from a packet?';
+  const calls = [];
+  const env = environment({makeNative:dictionary({
+    [source]:'Отличить пакет от пакета?',
+    'Could':'Могли', 'they tell':'бы они отличить', 'a carton':'коробку', 'from a':'от', 'packet?':'пакета?',
+  }, calls)});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  const lines = await engine.translate(subtitle.units);
+  assert.equal(lines.join(' '), 'Могли бы они отличить коробку от пакета?');
+  assert.equal(engine.contextStats.splitFallbacks,1);
+  assert.deepEqual(engine.contextStats.contrastIssues,[]);
+  assert.equal(engine.contextStats.contrastRecovered,0);
+  engine.destroy();
+});
+
+test('cancelling a native contrast probe stops the job without publishing review findings', async () => {
+  const abort = new AbortController();
+  const source = 'Could they tell a carton from a packet?';
+  const env = environment({makeNative:()=>({async translate(text, options) {
+    if (text === source) return 'Могут ли они отличить пакет от пакета?';
+    abort.abort();
+    options.signal.throwIfAborted();
+  }, destroy() {}})});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  await assert.rejects(engine.translate([{id:1,cue:1,text:source}],{signal:abort.signal}), {name:'AbortError'});
+  assert.deepEqual(engine.contextStats.contrastIssues,[]);
+  assert.equal(engine.contextStats.contrastRecovered,0);
+  engine.destroy();
+});

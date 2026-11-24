@@ -17,7 +17,7 @@
     const previous = section.querySelector('#review-prev'), next = section.querySelector('#review-next');
     const pageLabel = section.querySelector('#review-page');
     const snapshots = new WeakMap(), fields = new Map();
-    let units = [];
+    let units = [], flagged = new Set(), notice = null;
     let cues = [], generated = [], current = [], saved = [], changed = new Set();
     let matches = [], page = 0, generation = 0;
 
@@ -66,6 +66,7 @@
           fields.set(id, input); ids.push(id);
           input.required = true; input.dir = 'auto'; input.spellcheck = true; input.value = current[id];
           input.rows = Math.min(4, Math.max(1, Math.ceil(input.value.length / 48)));
+          if (flagged.has(id)) input.setAttribute('aria-describedby', 'review-contrast-note');
           input.setAttribute('aria-label', 'Translation, ' + label + ', line ' + (lineIndex+1) + ', part ' + (++part));
           input.addEventListener('input', () => { edit(id, input); updateMarker(); });
           resultLine.append(input);
@@ -76,6 +77,7 @@
         original.append(element('span', 'review-literal', '—'));
         translation.append(element('span', 'review-literal', '—'));
       }
+      if (ids.some(id => flagged.has(id))) heading.append(element('span', 'review-literal', 'Check word choice'));
       updateMarker();
       row.append(heading, original, translation);
       return row;
@@ -140,7 +142,30 @@
       return lines.slice();
     }
 
-    function load(prepared, generatedLines, savedLines = generatedLines) {
+    function showContrastNotice(issueIds) {
+      notice?.remove(); notice = null;
+      flagged = new Set(issueIds);
+      const ids = [...flagged];
+      if (!ids.length) return;
+      let next = 0;
+      const jump = element('button', 'text-button');
+      jump.type = 'button';
+      function label() {
+        const cue = cues[units[ids[next]].cue-1];
+        jump.textContent = 'Go to cue ' + (cue.identifier || cue.number);
+      }
+      jump.addEventListener('click', () => {
+        focusUnit(ids[next]); next = (next + 1) % ids.length; label();
+      });
+      label();
+      const explanation = element('span', '', 'The generated translation may use one word for two different source terms. ');
+      explanation.id = 'review-contrast-note';
+      notice = element('p', 'hint review-hint');
+      notice.append(explanation, jump);
+      section.insertBefore(notice, section.querySelector('.review-filters') || rows);
+    }
+
+    function load(prepared, generatedLines, savedLines = generatedLines, contrastIssues = []) {
       const initial = linesCopy(generatedLines, prepared.units.length);
       const values = linesCopy(savedLines, prepared.units.length);
       const wasDirty = changed.size > 0;
@@ -148,6 +173,7 @@
       cues = prepared.cues; units = prepared.units;
       generated = initial; current = values; saved = values.slice(); changed.clear();
       search.value = ''; matches = cues; page = 0;
+      showContrastNotice(contrastIssues.filter(id => Number.isInteger(id) && units[id]));
       section.hidden = false; show(); reportChange(wasDirty);
     }
 
@@ -157,6 +183,7 @@
       cues = []; units = []; generated = []; current = []; saved = []; changed.clear(); fields.clear();
       matches = []; page = 0;
       rows.replaceChildren(); search.value = ''; pageLabel.textContent = '';
+      showContrastNotice([]);
       section.hidden = true; reportChange(wasDirty);
     }
 

@@ -48,7 +48,8 @@
         <label>From<select id="source-language"><option value="">Auto-detect</option></select></label>
         <label>To<select id="target-language"></select></label>
       </div>
-      <p class="hint chrome-note">Works on device in desktop Google Chrome only. On first use, Chrome may download language packs or the Gemini Nano model. Your subtitle stays on this device.</p>
+      <p class="hint chrome-note">Translation quality can be poor. It’s completely free, and your subtitles stay on this device.</p>
+      <p class="hint chrome-note">Works only in desktop Google Chrome. Chrome may download a language pack or AI model on first use.</p>
       <div class="translation-actions">
         <button type="button" class="primary" id="translate" disabled>Translate</button>
         <button type="button" class="text-button" id="cancel" hidden>Cancel</button>
@@ -87,7 +88,7 @@
       </nav>
     </section>
     <details class="help"><summary>About translation quality</summary>
-      <p>Cueframe joins lines that continue the same thought, translates the phrase and fits it back into the original subtitle lines. It indexes the whole file to find related dialogue, including later mentions of names and expressions. The context available to the model depends on the language pair. Review ambiguous speakers, idioms and scene changes before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
+      <p>Cueframe joins lines that continue the same thought, translates the phrase and fits it back into the original subtitle lines. It indexes the whole file to find related dialogue, including later mentions of names and expressions. The result shows which Chrome model processed your subtitle. Gemini Nano can translate or review dialogue in the languages it supports. Other language pairs use Chrome’s built-in Translator. Names, idioms and who did what can still need an editor’s eye. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
     </details>
     <footer><span>Cueframe</span><a href="https://perfectintegers.com/subsync/">Sync subtitle timings</a></footer>
   </main>
@@ -95,6 +96,7 @@
   <script src="translation-srt.js"></script>
   <script src="translation-phrases.js"></script>
   <script src="translation-context.js"></script>
+  <script src="translation-contrast.js"></script>
   <script src="translation-engine.js"></script>
   <script src="translation-draft.js"></script>
   <script src="translation-review.js"></script>

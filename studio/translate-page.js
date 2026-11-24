@@ -10,7 +10,7 @@
   const modes = {
     context: 'Gemini Nano translates phrases using nearby and related dialogue.',
     review: 'Gemini Nano reviews translated phrases alongside related dialogue.',
-    standard: 'Chrome translates phrases from the original dialogue.',
+    standard: 'Translation uses Chrome’s built-in Translator.',
   };
   function outputEncoding(bytes, selected) {
     const header = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2));
@@ -80,8 +80,8 @@
       el('translation-output').hidden = true;
       status.dataset.kind = ''; status.textContent = ''; updateButtons();
     }
-    function open(prepared, item, isSaved = false, issue = null) {
-      current = {prepared, item, issue, reviewOpen:false}; stored = isSaved; lastDownload = null;
+    function open(prepared, item, isSaved = false, issue = null, contrastIssues = []) {
+      current = {prepared, item, issue, contrastIssues, reviewOpen:false}; stored = isSaved; lastDownload = null;
       section.hidden = true; opener.setAttribute('aria-expanded', 'false');
       el('result-file').textContent = exportName(item);
       el('translation-output').hidden = false;
@@ -93,7 +93,7 @@
       if (!current) return;
       if (!current.reviewOpen) {
         const {item, prepared} = current;
-        review.load(prepared, item.generatedLines, item.editedLines || item.generatedLines);
+        review.load(prepared, item.generatedLines, item.editedLines || item.generatedLines, current.contrastIssues);
         current.reviewOpen = true;
       }
       section.hidden = false; opener.setAttribute('aria-expanded', 'true');
@@ -234,7 +234,7 @@
     }
     function showMode(mode, completed = 0) {
       info.textContent = completed && mode === 'standard'
-        ? 'Chrome’s local translator is completing the remaining segments.' : modes[mode] || '';
+        ? 'Chrome’s built-in Translator is completing the remaining phrases.' : modes[mode] || '';
       info.hidden = !info.textContent;
     }
     function release(run) {
@@ -392,12 +392,21 @@
           issue = error;
         }
         const stats = session.contextStats;
+        const contrastIssues = [...new Set(stats?.contrastIssues || [])]
+          .filter(id => Number.isInteger(id) && prepared.units[id]).sort((a,b) => a-b);
         if (stats) {
           const notes = [modes[session.mode]];
           const joined = stats.joinedPhrases - stats.splitFallbacks;
           if (joined > 0) notes.push(joined.toLocaleString() + (joined === 1 ? ' phrase was' : ' phrases were') + ' translated across subtitle breaks.');
           if (stats.nativeAccepted > 0) notes.push(stats.nativeAccepted.toLocaleString() + (stats.nativeAccepted === 1 ? ' phrase was' : ' phrases were') + ' translated with reference dialogue.');
           if (stats.splitFallbacks > 0) notes.push(stats.splitFallbacks.toLocaleString() + (stats.splitFallbacks === 1 ? ' phrase needed' : ' phrases needed') + ' separate translations to fit the original lines.');
+          if (contrastIssues.length) {
+            const numbers = [...new Set(contrastIssues.map(id => prepared.units[id].cue))];
+            const labels = numbers.slice(0, 3).map(n => prepared.cues[n-1].identifier || n);
+            const location = numbers.length === 1 ? 'cue ' + labels[0] :
+              numbers.length <= 3 ? 'cues ' + labels.join(', ') : numbers.length + ' cues, including ' + labels.join(', ');
+            notes.push('Check word choice in ' + location + '.');
+          }
           info.textContent = notes.join(' ');
           info.hidden = false;
         }
@@ -405,7 +414,7 @@
         if (issue) message(repairMessage(issue), 'error');
         else message(completedMessage(prepared), 'ok');
         workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
-          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue);
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue, contrastIssues);
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {

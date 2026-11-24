@@ -19,7 +19,9 @@ class Element {
   setAttribute(key, value) {this.attrs[key] = value;}
   addEventListener(name, handler) {this.handlers[name] = handler;}
   fire(name) {this.handlers[name]();}
-  append(...children) {this.children.push(...children);}
+  append(...children) { for (const child of children) child.parent = this; this.children.push(...children); }
+  insertBefore(child, next) { child.parent = this; this.children.splice(this.children.indexOf(next),0,child); }
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); }
   replaceChildren(...children) {this.children = children;}
   all(predicate) {
     const nodes = this.children.flatMap(child => [child, ...child.all(predicate)]);
@@ -119,4 +121,21 @@ test('locates an invalid fragment across filters and pages without discarding ed
   review.clear();
   assert.deepEqual(review.getLines(), []); assert.equal(review.hasUnsaved(), false);
   assert.equal(ids.rows.children.length, 0);
+});
+
+test('the optional contrast link focuses an affected field on demand and is cleared with the previous review', () => {
+  const {review, prepared, generated, section, doc, ids} = setup();
+  const last = prepared.units.at(-1).id;
+  review.load(prepared,generated,generated,[last]);
+  const jump = section.all(n => n.tag === 'button' && /Go to cue/.test(n.textContent))[0];
+  assert.ok(jump);
+  assert.equal(doc.activeElement,undefined);
+  assert.equal(ids.page.textContent,'1–25 of 55');
+  jump.fire('click');
+  assert.equal(ids.page.textContent,'51–55 of 55');
+  assert.equal(doc.activeElement.attrs['aria-describedby'],'review-contrast-note');
+  assert.ok(ids.rows.children.at(-1).all(n => n.textContent === 'Check word choice').length);
+  assert.equal(review.hasUnsaved(),false);
+  review.clear(); review.load(prepared,generated);
+  assert.equal(section.all(n => n.tag === 'button' && /Go to cue/.test(n.textContent)).length,0);
 });

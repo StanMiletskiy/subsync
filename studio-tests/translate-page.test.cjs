@@ -55,7 +55,8 @@ function editingReview(onDirtyChange) {
     onDirtyChange(false);
   }
   return {
-    load(prepared, generated, edited = generated) {
+    load(prepared, generated, edited = generated, contrastIssues = []) {
+      this.contrastIssues = contrastIssues;
       this.loadCount = (this.loadCount || 0) + 1;
       assert.equal(edited.length, prepared.units.length);
       replace(edited);
@@ -444,4 +445,24 @@ test('Review & edit is an explicit action even on a bookmarked editor fragment; 
   assert.equal(ids['translation-review'].hidden, true);
   assert.equal(ids['review-open']['aria-expanded'], 'false');
   assert.equal(state.review.loadCount, 1);
+});
+
+test('a remaining contrast is an optional cue-level hint and never opens review or blocks direct download', async () => {
+  const engine = {start:async () => ({
+    mode:'standard', destroy() {},
+    contextStats:{contrastIssues:[0,0,23,-1], joinedPhrases:1, splitFallbacks:0},
+    async translate() { return ['Los dos son iguales.']; },
+  })};
+  const {ids,state,choose,draft} = setup({engine});
+  await choose(); await ids.translate.fire('click');
+  assert.match(ids['translation-mode'].textContent, /Chrome’s built-in Translator/);
+  assert.match(ids['translation-mode'].textContent, /Check word choice in cue 7\./);
+  assert.equal(ids['translation-review'].hidden,true);
+  assert.equal(state.review.focusedUnit,undefined);
+  ids.export.click();
+  assert.equal(await state.blob.text(),subtitle.replace('Hello!','Los dos son iguales.'));
+  assert.equal(draft.writes,0);
+  ids['review-open'].click();
+  assert.deepEqual(state.review.contrastIssues,[0]);
+  assert.equal(state.review.focusedUnit,undefined);
 });

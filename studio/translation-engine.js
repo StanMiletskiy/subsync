@@ -5,6 +5,7 @@
   const commonJS = typeof module !== 'undefined' && module.exports;
   const phrasing = commonJS ? require('./translation-phrases') : globalThis.CueTranslationPhrases;
   const filmContext = commonJS ? require('./translation-context') : globalThis.CueTranslationContext;
+  const contrast = commonJS ? require('./translation-contrast') : globalThis.CueTranslationContrast;
   const unavailable = 'unavailable';
   const statusValues = new Set(['available', 'downloadable', 'downloading']);
   const languages = new Intl.DisplayNames(['en'], {type: 'language'});
@@ -116,7 +117,8 @@
       const memory = filmContext.create(phrases, selection.source);
       const output = [], accepted = [], drafts = new Map(), triedContext = new Set();
       const stats = counters = {joinedPhrases: phrases.filter(p => p.units.length > 1).length,
-        nativeAttempts: 0, nativeAccepted: 0, reused: 0, splitFallbacks: 0};
+        nativeAttempts: 0, nativeAccepted: 0, reused: 0, splitFallbacks: 0,
+        contrastRecovered: 0, contrastIssues: []};
       let collapsed = 0, retryContextAt = 0;
 
       async function nativeText(text) {
@@ -226,8 +228,35 @@
 
       async function append(i, text, fromContext = false) {
         const phrase = phrases[i], offset = output.length;
+        const inspectContrast = value => mode === 'standard' &&
+          contrast.inspect(phrase.text, value, selection.source, selection.target);
+        let attemptedContrast;
+        async function repairContrast(value) {
+          if (value === attemptedContrast) return null;
+          const issue = inspectContrast(value);
+          if (!issue) return null;
+          attemptedContrast = value;
+          try {
+            const nearby = phrases.slice(Math.max(0, i - 4), i).concat(phrases.slice(i + 1, i + 5));
+            const repair = await contrast.recover(issue, {
+              translate: source => translator.translate(source, {signal: active}), signal: active,
+              sourceContext: nearby.map(item => excerpt(item.text)),
+            });
+            active.throwIfAborted();
+            if (repair.status !== 'recovered') return null;
+            const text = finalize(phrase, cleanText(repair.text), offset);
+            if (inspectContrast(text)) return null;
+            const parts = phrasing.redistribute(phrase, text, selection.target);
+            return parts ? {text, parts} : null;
+          } catch {
+            active.throwIfAborted();
+            return null;
+          }
+        }
         let result = finalize(phrase, text, offset);
-        let parts = phrasing.redistribute(phrase, result, selection.target);
+        let repair = await repairContrast(result);
+        if (repair) result = repair.text;
+        let parts = repair?.parts ?? phrasing.redistribute(phrase, result, selection.target);
         if (!parts && nano && mode !== 'standard') {
           const text = mode === 'review' ? await draft(i) : phrase.text;
           const row = {id:phrase.id, cue:phrase.cue, text, minimumPieces:phrase.units.length};
@@ -246,9 +275,10 @@
           else alternate = await contextualNative(i);
           if (alternate && alternate !== text) {
             const other = finalize(phrase, alternate, offset);
-            parts = phrasing.redistribute(phrase, other, selection.target);
+            repair = await repairContrast(other);
+            parts = repair?.parts ?? phrasing.redistribute(phrase, other, selection.target);
             if (parts) {
-              result = other;
+              result = repair?.text ?? other;
               fromContext = alternate !== drafts.get(i);
             }
           }
@@ -292,12 +322,17 @@
               parts = phrase.units.map((_, index) => index ? '' : result);
             }
           }
-          accepted[i] = parts.join(' ').trim();
+          const joined = parts.join(' ').trim();
+          repair = await repairContrast(joined);
+          if (repair) parts = repair.parts;
+          accepted[i] = repair?.text ?? joined;
         } else {
           accepted[i] = result;
           memory.remember(i, result);
-          if (fromContext) stats.nativeAccepted++;
+          if (fromContext && !repair) stats.nativeAccepted++;
         }
+        if (repair) stats.contrastRecovered++;
+        else if (accepted[i] === attemptedContrast) stats.contrastIssues.push(phrase.units[0].id);
         output.push(...parts);
       }
 
@@ -346,7 +381,9 @@
       }
       return output;
     }
-    return {get mode() { return mode; }, get contextStats() { return {...counters}; }, translate, destroy};
+    return {get mode() { return mode; },
+      get contextStats() { return counters ? {...counters, contrastIssues: [...counters.contrastIssues]} : {}; },
+      translate, destroy};
   }
 
   function nearbyReply(phrases, i, sourceLanguage) {

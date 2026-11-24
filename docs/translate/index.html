@@ -279,7 +279,8 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         <label>From<select id="source-language"><option value="">Auto-detect</option></select></label>
         <label>To<select id="target-language"></select></label>
       </div>
-      <p class="hint chrome-note">Works on device in desktop Google Chrome only. On first use, Chrome may download language packs or the Gemini Nano model. Your subtitle stays on this device.</p>
+      <p class="hint chrome-note">Translation quality can be poor. It’s completely free, and your subtitles stay on this device.</p>
+      <p class="hint chrome-note">Works only in desktop Google Chrome. Chrome may download a language pack or AI model on first use.</p>
       <div class="translation-actions">
         <button type="button" class="primary" id="translate" disabled>Translate</button>
         <button type="button" class="text-button" id="cancel" hidden>Cancel</button>
@@ -318,7 +319,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       </nav>
     </section>
     <details class="help"><summary>About translation quality</summary>
-      <p>Cueframe joins lines that continue the same thought, translates the phrase and fits it back into the original subtitle lines. It indexes the whole file to find related dialogue, including later mentions of names and expressions. The context available to the model depends on the language pair. Review ambiguous speakers, idioms and scene changes before publishing. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
+      <p>Cueframe joins lines that continue the same thought, translates the phrase and fits it back into the original subtitle lines. It indexes the whole file to find related dialogue, including later mentions of names and expressions. The result shows which Chrome model processed your subtitle. Gemini Nano can translate or review dialogue in the languages it supports. Other language pairs use Chrome’s built-in Translator. Names, idioms and who did what can still need an editor’s eye. Timestamps, line breaks and formatting stay intact. Unicode SRTs keep their encoding. Older encodings export as UTF-8.</p>
     </details>
     <footer><span>Cueframe</span><a href="https://perfectintegers.com/subsync/">Sync subtitle timings</a></footer>
   </main>
@@ -1251,9 +1252,212 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 (function () {
   'use strict';
 
+  // Work only on explicit, two-part English contrasts. Preserve every byte of
+  // the surrounding Russian clause, changing only the verified term interiors.
+  const quote = /"([^"\r\n]+)"|«([^«»\r\n]+)»|“([^“”\r\n]+)”|‘([^‘’\r\n]+)’|'([^'\r\n]+)'/gu;
+  const term = /^[\p{L}\p{M}]+(?:[ -][\p{L}\p{M}]+){0,3}$/u;
+  const letters = text => text.toLocaleLowerCase('ru').normalize('NFC').replace(/ё/g, 'е').match(/\p{L}+/gu) || [];
+  const tokenEnd = /[.!?…,:;"'”»]*$/u;
+
+  function slot(text, start) { return {text, start, end:start + text.length}; }
+  function replaceSlots(text, slots, terms) {
+    return text.slice(0, slots[0].start) + terms[0] + text.slice(slots[0].end, slots[1].start) +
+      terms[1] + text.slice(slots[1].end);
+  }
+  function quoted(text) {
+    return [...text.matchAll(quote)].map(m => slot(m[0].slice(1,-1), m.index + 1));
+  }
+  function sourcePair(text) {
+    const q = quoted(text);
+    if (q.length === 2 && q.every(x=>term.test(x.text))) {
+      const pre = text.slice(0, q[0].start - 1), bridge = text.slice(q[0].end + 1, q[1].start - 1).trim();
+      if ((/\b(?:difference|distinction)\s+between\s*$/i.test(pre) && /^and$/i.test(bridge)) ||
+          (/\b(?:tell|distinguish|differentiate)\s*$/i.test(pre) && /^from$/i.test(bridge))) {
+        return {terms:q, quoted:true};
+      }
+    }
+    if (q.length) return null;
+    const m = /\b(?:(?:difference|distinction)\s+between\s+(.+?)\s+and\s+|(?:tell|distinguish|differentiate)\s+(.+?)\s+from\s+)(.+?)[.!?…]*$/iu.exec(text);
+    if (!m) return null;
+    const left = m[1] ?? m[2], right = m[3];
+    // Require two explicitly introduced noun groups. Unmarked "tell me from
+    // experience" and clauses containing a conjunction are outside this rule.
+    if (![left, right].every(s => /^(?:an?|the)\s/i.test(s) && term.test(s) &&
+        !/\b(?:and|or|that|who|when|with)\b/i.test(s))) return null;
+    const offset = m.index + m[0].indexOf(left);
+    return {terms:[slot(left,offset),slot(right,text.lastIndexOf(right))], quoted:false};
+  }
+
+  function targetPair(text) {
+    const q = quoted(text);
+    if (q.length === 2 && q.every(x=>term.test(x.text))) {
+      const pre = text.slice(0,q[0].start - 1), bridge = text.slice(q[0].end+1,q[1].start-1).trim().toLowerCase();
+      if (bridge === 'от' || (bridge === 'и' && /между\s*$/iu.test(pre))) {
+        return {terms:q, family:bridge==='от'?'from':'between', quoted:true};
+      }
+    }
+    if (q.length) return null;
+    const m = /(?:между\s+(.+?)\s+и\s+|(?:отлич|различ)[а-яё]+\s+(.+?)\s+от\s+)(.+?)[.!?…,:;"'”»]*$/iu.exec(text);
+    if (!m) return null;
+    const left = m[1] ?? m[2], right = m[3];
+    if (![left,right].every(s=>term.test(s) && /^[а-яё\s-]+$/iu.test(s) &&
+      !/(?:^|\s)(?:и|или|но|когда|если|ли|они|он|она|вы|ты|мы)(?:\s|$)/iu.test(s))) return null;
+    const offset = m.index + m[0].indexOf(left);
+    return {terms:[slot(left, offset),slot(right,text.lastIndexOf(right))],family:m[1] ? 'between':'from',quoted:false};
+  }
+
+  function stems(word) {
+    const result = new Set([word]);
+    const ending = /(?:иями|ами|ями|ого|его|ому|ему|ыми|ими|ах|ях|ам|ям|ом|ем|ою|ею|ой|ей|ов|ев|ым|им|ая|яя|ое|ее|ые|ие|ый|ий|ую|юю|а|я|ы|и|е|у|ю|о|ь|й)$/u.exec(word);
+    if (ending && ending.index >= 3) result.add(word.slice(0,ending.index));
+    // Fleeting vowels in Russian nouns, e.g. замок / замка, пакет / пакета.
+    if (word.length >= 5 && /[ое]к$/u.test(word)) result.add(word.slice(0,-2) + 'к');
+    return result;
+  }
+  function equivalent(a, b) {
+    const x = letters(a), y = letters(b);
+    if (!x.length || x.length !== y.length) return false;
+    return x.every((word, i) => {
+      const other = stems(y[i]);
+      return [...stems(word)].some(v=>other.has(v));
+    });
+  }
+  function inspect(sourceText, targetText, sourceLanguage, targetLanguage) {
+    if (sourceLanguage?.split('-')[0] !== 'en' || targetLanguage?.split('-')[0] !== 'ru' ||
+        typeof sourceText !== 'string' || typeof targetText !== 'string' ||
+        sourceText.length > 360 || targetText.length > 500 || /[\r\n]/u.test(sourceText + targetText)) return null;
+    const source = sourcePair(sourceText), target = targetPair(targetText);
+    if (!source || !target || source.terms[0].text.toLowerCase().replace(/^(?:an?|the) /u,'') ===
+        source.terms[1].text.toLowerCase().replace(/^(?:an?|the) /u,'') ||
+        !equivalent(target.terms[0].text, target.terms[1].text)) return null;
+    return {sourceText,targetText,source,target};
+  }
+
+  function verbContext(terms, context) {
+    const text = (Array.isArray(context) ? context.join('\n') : String(context || '')).slice(0,4000);
+    return terms.some(({text:word}) => {
+      const base = word.toLowerCase();
+      if (!/^[a-z]{2,20}$/u.test(base)) return false;
+      const forms = base + '(?:s|ed|ing)?|' + (base.endsWith('e') ? base.slice(0,-1) : base) + '(?:ed|ing)|' +
+        base + base.at(-1) + '(?:ed|ing)';
+      // Use an actual auxiliary/modal construction from the film as lexical
+      // evidence. The labels being repaired cannot supply their own evidence.
+      return new RegExp('\\b(?:is|was|were|been|being|are|has|have|had|can|could|will|would|must|did|does|do)' +
+        '\\s+(?:(?:not|never|really|also|he|she|they|you|it|we|i)\\s+){0,2}(?:' + forms + ')\\b','i').test(text);
+    });
+  }
+  function matchesOriginalVerb(verb, nominal) {
+    const root = verb.toLowerCase().replace(/(?:аться|иться|нуть|ить|еть|ать|ять)$/u,'');
+    return root.length >= 3 && letters(nominal).length === 1 && stems(letters(nominal)[0]).has(root);
+  }
+  function grammaticalCase(proposed, witness, role, query) {
+    // Quoted Russian labels sometimes remain in nominative. When restoring an
+    // unquoted noun, corroborate its case as well as its lexical identity.
+    const p = letters(proposed).at(-1), w = letters(witness).at(-1);
+    if (!p || !w) return false;
+    if (role === 'instrumental') return query === 'with' && p === w;
+    if (role === 'genitive') {
+      if (query === 'from' && p === w) return true;
+      return /(?:а|я|ы|и|ей|ов|ев)$/u.test(p) && p !== w;
+    }
+    if (query === 'see' && p === w) return true;
+    if (/(?:у|ю)$/u.test(p) && p !== w) return true;
+    // Masculine inanimate nouns often share a nominative/accusative. An
+    // explicit accusative witness is needed for other noun forms.
+    return query === 'bare' && p === w && /[бвгджзклмнпрстфхцчшщ]$/u.test(p);
+  }
+  function probeTerm(text) {
+    if (!text || /[\r\n<>\[\]{}]/u.test(text)) return null;
+    const unwrapped = text.trim().replace(/^(?:это\s+(?:был[аои]?\s+)?|они\s+могут\s+|я\s+вижу\s+|(?:от|со|с)\s+)/iu,'')
+      .replace(/^[«“"'‘]+/u,'').replace(tokenEnd,'').replace(/[’“]+$/u,'').trim();
+    return term.test(unwrapped) && /^[а-яё -]+$/iu.test(unwrapped) ? unwrapped : null;
+  }
+
+  async function recover(issue, {translate,signal,sourceContext} = {}) {
+    const original = {text:issue.targetText,status:'unresolved'};
+    signal?.throwIfAborted();
+    if (typeof translate !== 'function') return original;
+    // The English probes use grammatical frames, never topic vocabulary.
+    const {source,target,sourceText,targetText} = issue;
+    const labels = source.terms.map(t=>t.text);
+    const cache = new Map();
+    async function ask(input) {
+      signal?.throwIfAborted();
+      if (!cache.has(input)) {
+        const raw = await translate(input,{signal});
+        signal?.throwIfAborted();
+        cache.set(input,typeof raw === 'string' && raw.length <= 700 && !/[<>\r\n\[\]{}]/u.test(raw) ? raw.trim() : '');
+      }
+      return cache.get(input);
+    }
+    try {
+      let terms;
+      if (source.quoted && labels.every(x=>/^[a-z]{2,20}$/u.test(x)) &&
+          target.quoted && verbContext(source.terms,sourceContext)) {
+        const variant = replaceSlots(sourceText,source.terms,labels.map(t=>'to ' + t));
+        const pair = targetPair(await ask(variant));
+        if (pair?.family === target.family && pair.quoted) {
+          const proposed = pair.terms.map(x=>x.text);
+          const confirmed = [];
+          for (const [i,word] of labels.entries()) {
+            const bare = probeTerm(await ask('to ' + word));
+            const framed = probeTerm(await ask('They can ' + word + '.'));
+            confirmed.push(/(?:ть|ти|чь)(?:ся|сь)?$/iu.test(proposed[i]) && bare && framed &&
+              equivalent(bare,proposed[i]) && equivalent(framed,proposed[i]) &&
+              (verbContext([source.terms[i]],sourceContext) || matchesOriginalVerb(proposed[i],target.terms[i].text)));
+          }
+          if (confirmed.every(Boolean)) terms = proposed;
+        }
+      } else if (!source.quoted) {
+        const variant = replaceSlots(sourceText,source.terms,labels.map(t=>'"' + t + '"'));
+        const pair = targetPair(await ask(variant));
+        if (!pair || pair.family !== target.family || equivalent(pair.terms[0].text,pair.terms[1].text)) return original;
+        const proposed = pair.terms.map(x=>x.text), verified = [];
+        for (const [i,word] of labels.entries()) {
+          if (equivalent(proposed[i],target.terms[i].text)) { verified.push(true); continue; }
+          // A native model may translate the surrounding predicate incorrectly
+          // after quoting the terms. Transfer only a corroborated, case-matched
+          // operand from the same Russian grammatical position.
+          const role = target.family === 'between' ? 'instrumental' : i === 1 ? 'genitive' : 'accusative';
+          const queries = [['bare',word], ['with','with ' + word]];
+          if (role === 'genitive') queries.push(['from','from "' + word + '"']);
+          if (role === 'accusative') queries.push(['see','I see ' + word + '.']);
+          let matched = false;
+          for (const [frame, query] of queries) {
+            const witness = probeTerm(await ask(query));
+            if (witness && equivalent(witness,proposed[i]) &&
+                (target.quoted || grammaticalCase(proposed[i],witness,role,frame))) { matched = true; break; }
+          }
+          verified.push(matched);
+        }
+        if (verified.every(Boolean)) terms = proposed.map((t,i) =>
+          equivalent(t,target.terms[i].text) ? target.terms[i].text : t);
+      }
+      if (!terms || equivalent(terms[0],terms[1])) return original;
+      const text = replaceSlots(targetText,target.terms,terms);
+      return {text,status:'recovered'};
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error?.name === 'AbortError') throw error;
+      return original;
+    }
+  }
+
+  const api = {inspect,recover};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  globalThis.CueTranslationContrast = api;
+})();
+
+</script>
+  <script>
+// SPDX-License-Identifier: GPL-3.0-or-later
+(function () {
+  'use strict';
+
   const commonJS = typeof module !== 'undefined' && module.exports;
   const phrasing = commonJS ? require('./translation-phrases') : globalThis.CueTranslationPhrases;
   const filmContext = commonJS ? require('./translation-context') : globalThis.CueTranslationContext;
+  const contrast = commonJS ? require('./translation-contrast') : globalThis.CueTranslationContrast;
   const unavailable = 'unavailable';
   const statusValues = new Set(['available', 'downloadable', 'downloading']);
   const languages = new Intl.DisplayNames(['en'], {type: 'language'});
@@ -1365,7 +1569,8 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       const memory = filmContext.create(phrases, selection.source);
       const output = [], accepted = [], drafts = new Map(), triedContext = new Set();
       const stats = counters = {joinedPhrases: phrases.filter(p => p.units.length > 1).length,
-        nativeAttempts: 0, nativeAccepted: 0, reused: 0, splitFallbacks: 0};
+        nativeAttempts: 0, nativeAccepted: 0, reused: 0, splitFallbacks: 0,
+        contrastRecovered: 0, contrastIssues: []};
       let collapsed = 0, retryContextAt = 0;
 
       async function nativeText(text) {
@@ -1475,8 +1680,35 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 
       async function append(i, text, fromContext = false) {
         const phrase = phrases[i], offset = output.length;
+        const inspectContrast = value => mode === 'standard' &&
+          contrast.inspect(phrase.text, value, selection.source, selection.target);
+        let attemptedContrast;
+        async function repairContrast(value) {
+          if (value === attemptedContrast) return null;
+          const issue = inspectContrast(value);
+          if (!issue) return null;
+          attemptedContrast = value;
+          try {
+            const nearby = phrases.slice(Math.max(0, i - 4), i).concat(phrases.slice(i + 1, i + 5));
+            const repair = await contrast.recover(issue, {
+              translate: source => translator.translate(source, {signal: active}), signal: active,
+              sourceContext: nearby.map(item => excerpt(item.text)),
+            });
+            active.throwIfAborted();
+            if (repair.status !== 'recovered') return null;
+            const text = finalize(phrase, cleanText(repair.text), offset);
+            if (inspectContrast(text)) return null;
+            const parts = phrasing.redistribute(phrase, text, selection.target);
+            return parts ? {text, parts} : null;
+          } catch {
+            active.throwIfAborted();
+            return null;
+          }
+        }
         let result = finalize(phrase, text, offset);
-        let parts = phrasing.redistribute(phrase, result, selection.target);
+        let repair = await repairContrast(result);
+        if (repair) result = repair.text;
+        let parts = repair?.parts ?? phrasing.redistribute(phrase, result, selection.target);
         if (!parts && nano && mode !== 'standard') {
           const text = mode === 'review' ? await draft(i) : phrase.text;
           const row = {id:phrase.id, cue:phrase.cue, text, minimumPieces:phrase.units.length};
@@ -1495,9 +1727,10 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           else alternate = await contextualNative(i);
           if (alternate && alternate !== text) {
             const other = finalize(phrase, alternate, offset);
-            parts = phrasing.redistribute(phrase, other, selection.target);
+            repair = await repairContrast(other);
+            parts = repair?.parts ?? phrasing.redistribute(phrase, other, selection.target);
             if (parts) {
-              result = other;
+              result = repair?.text ?? other;
               fromContext = alternate !== drafts.get(i);
             }
           }
@@ -1541,12 +1774,17 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
               parts = phrase.units.map((_, index) => index ? '' : result);
             }
           }
-          accepted[i] = parts.join(' ').trim();
+          const joined = parts.join(' ').trim();
+          repair = await repairContrast(joined);
+          if (repair) parts = repair.parts;
+          accepted[i] = repair?.text ?? joined;
         } else {
           accepted[i] = result;
           memory.remember(i, result);
-          if (fromContext) stats.nativeAccepted++;
+          if (fromContext && !repair) stats.nativeAccepted++;
         }
+        if (repair) stats.contrastRecovered++;
+        else if (accepted[i] === attemptedContrast) stats.contrastIssues.push(phrase.units[0].id);
         output.push(...parts);
       }
 
@@ -1595,7 +1833,9 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       }
       return output;
     }
-    return {get mode() { return mode; }, get contextStats() { return {...counters}; }, translate, destroy};
+    return {get mode() { return mode; },
+      get contextStats() { return counters ? {...counters, contrastIssues: [...counters.contrastIssues]} : {}; },
+      translate, destroy};
   }
 
   function nearbyReply(phrases, i, sourceLanguage) {
@@ -1950,7 +2190,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     const previous = section.querySelector('#review-prev'), next = section.querySelector('#review-next');
     const pageLabel = section.querySelector('#review-page');
     const snapshots = new WeakMap(), fields = new Map();
-    let units = [];
+    let units = [], flagged = new Set(), notice = null;
     let cues = [], generated = [], current = [], saved = [], changed = new Set();
     let matches = [], page = 0, generation = 0;
 
@@ -1999,6 +2239,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           fields.set(id, input); ids.push(id);
           input.required = true; input.dir = 'auto'; input.spellcheck = true; input.value = current[id];
           input.rows = Math.min(4, Math.max(1, Math.ceil(input.value.length / 48)));
+          if (flagged.has(id)) input.setAttribute('aria-describedby', 'review-contrast-note');
           input.setAttribute('aria-label', 'Translation, ' + label + ', line ' + (lineIndex+1) + ', part ' + (++part));
           input.addEventListener('input', () => { edit(id, input); updateMarker(); });
           resultLine.append(input);
@@ -2009,6 +2250,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         original.append(element('span', 'review-literal', '—'));
         translation.append(element('span', 'review-literal', '—'));
       }
+      if (ids.some(id => flagged.has(id))) heading.append(element('span', 'review-literal', 'Check word choice'));
       updateMarker();
       row.append(heading, original, translation);
       return row;
@@ -2073,7 +2315,30 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       return lines.slice();
     }
 
-    function load(prepared, generatedLines, savedLines = generatedLines) {
+    function showContrastNotice(issueIds) {
+      notice?.remove(); notice = null;
+      flagged = new Set(issueIds);
+      const ids = [...flagged];
+      if (!ids.length) return;
+      let next = 0;
+      const jump = element('button', 'text-button');
+      jump.type = 'button';
+      function label() {
+        const cue = cues[units[ids[next]].cue-1];
+        jump.textContent = 'Go to cue ' + (cue.identifier || cue.number);
+      }
+      jump.addEventListener('click', () => {
+        focusUnit(ids[next]); next = (next + 1) % ids.length; label();
+      });
+      label();
+      const explanation = element('span', '', 'The generated translation may use one word for two different source terms. ');
+      explanation.id = 'review-contrast-note';
+      notice = element('p', 'hint review-hint');
+      notice.append(explanation, jump);
+      section.insertBefore(notice, section.querySelector('.review-filters') || rows);
+    }
+
+    function load(prepared, generatedLines, savedLines = generatedLines, contrastIssues = []) {
       const initial = linesCopy(generatedLines, prepared.units.length);
       const values = linesCopy(savedLines, prepared.units.length);
       const wasDirty = changed.size > 0;
@@ -2081,6 +2346,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       cues = prepared.cues; units = prepared.units;
       generated = initial; current = values; saved = values.slice(); changed.clear();
       search.value = ''; matches = cues; page = 0;
+      showContrastNotice(contrastIssues.filter(id => Number.isInteger(id) && units[id]));
       section.hidden = false; show(); reportChange(wasDirty);
     }
 
@@ -2090,6 +2356,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       cues = []; units = []; generated = []; current = []; saved = []; changed.clear(); fields.clear();
       matches = []; page = 0;
       rows.replaceChildren(); search.value = ''; pageLabel.textContent = '';
+      showContrastNotice([]);
       section.hidden = true; reportChange(wasDirty);
     }
 
@@ -2131,7 +2398,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
   const modes = {
     context: 'Gemini Nano translates phrases using nearby and related dialogue.',
     review: 'Gemini Nano reviews translated phrases alongside related dialogue.',
-    standard: 'Chrome translates phrases from the original dialogue.',
+    standard: 'Translation uses Chrome’s built-in Translator.',
   };
   function outputEncoding(bytes, selected) {
     const header = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2));
@@ -2201,8 +2468,8 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       el('translation-output').hidden = true;
       status.dataset.kind = ''; status.textContent = ''; updateButtons();
     }
-    function open(prepared, item, isSaved = false, issue = null) {
-      current = {prepared, item, issue, reviewOpen:false}; stored = isSaved; lastDownload = null;
+    function open(prepared, item, isSaved = false, issue = null, contrastIssues = []) {
+      current = {prepared, item, issue, contrastIssues, reviewOpen:false}; stored = isSaved; lastDownload = null;
       section.hidden = true; opener.setAttribute('aria-expanded', 'false');
       el('result-file').textContent = exportName(item);
       el('translation-output').hidden = false;
@@ -2214,7 +2481,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
       if (!current) return;
       if (!current.reviewOpen) {
         const {item, prepared} = current;
-        review.load(prepared, item.generatedLines, item.editedLines || item.generatedLines);
+        review.load(prepared, item.generatedLines, item.editedLines || item.generatedLines, current.contrastIssues);
         current.reviewOpen = true;
       }
       section.hidden = false; opener.setAttribute('aria-expanded', 'true');
@@ -2355,7 +2622,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
     }
     function showMode(mode, completed = 0) {
       info.textContent = completed && mode === 'standard'
-        ? 'Chrome’s local translator is completing the remaining segments.' : modes[mode] || '';
+        ? 'Chrome’s built-in Translator is completing the remaining phrases.' : modes[mode] || '';
       info.hidden = !info.textContent;
     }
     function release(run) {
@@ -2513,12 +2780,21 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
           issue = error;
         }
         const stats = session.contextStats;
+        const contrastIssues = [...new Set(stats?.contrastIssues || [])]
+          .filter(id => Number.isInteger(id) && prepared.units[id]).sort((a,b) => a-b);
         if (stats) {
           const notes = [modes[session.mode]];
           const joined = stats.joinedPhrases - stats.splitFallbacks;
           if (joined > 0) notes.push(joined.toLocaleString() + (joined === 1 ? ' phrase was' : ' phrases were') + ' translated across subtitle breaks.');
           if (stats.nativeAccepted > 0) notes.push(stats.nativeAccepted.toLocaleString() + (stats.nativeAccepted === 1 ? ' phrase was' : ' phrases were') + ' translated with reference dialogue.');
           if (stats.splitFallbacks > 0) notes.push(stats.splitFallbacks.toLocaleString() + (stats.splitFallbacks === 1 ? ' phrase needed' : ' phrases needed') + ' separate translations to fit the original lines.');
+          if (contrastIssues.length) {
+            const numbers = [...new Set(contrastIssues.map(id => prepared.units[id].cue))];
+            const labels = numbers.slice(0, 3).map(n => prepared.cues[n-1].identifier || n);
+            const location = numbers.length === 1 ? 'cue ' + labels[0] :
+              numbers.length <= 3 ? 'cues ' + labels.join(', ') : numbers.length + ' cues, including ' + labels.join(', ');
+            notes.push('Check word choice in ' + location + '.');
+          }
           info.textContent = notes.join(' ');
           info.hidden = false;
         }
@@ -2526,7 +2802,7 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
         if (issue) message(repairMessage(issue), 'error');
         else message(completedMessage(prepared), 'ok');
         workspace.open(prepared, {filename:file.name, sourceText, sourceLanguage:plan.source,
-          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue);
+          targetLanguage:plan.target, encoding:encodingForExport, generatedLines}, false, issue, contrastIssues);
       } catch (error) {
         if (task === current) { showMode(null); message(error.message || 'Translation could not finish. Try again.', 'error'); }
       } finally {
