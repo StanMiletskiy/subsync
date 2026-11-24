@@ -1,6 +1,6 @@
 # Cueframe · Subtitle sync
 
-[Open Cueframe](https://stanmiletskiy.github.io/subsync/) · [Download the standalone HTML for offline use](https://raw.githubusercontent.com/StanMiletskiy/subsync/master/docs/index.html)
+[Open Cueframe](https://perfectintegers.com/subsync/) · [Download the standalone HTML for offline use](https://raw.githubusercontent.com/StanMiletskiy/subsync/master/docs/index.html)
 
 Retiming an SRT changes when lines appear. Cueframe keeps the language, dialogue, line breaks, cue identifiers and styling in the file you selected. The interface is in English. Source and reference subtitles can be in any languages. The alignment engine compares the timing of dialogue and pauses without reading the words.
 
@@ -40,7 +40,7 @@ node --test studio-tests/*.test.cjs
 node studio/build.mjs
 ```
 
-The build generates `docs/index.html` and `docs/.nojekyll`. Commit the generated page alongside the source. GitHub Pages can publish directly from **Settings → Pages → Deploy from a branch → master → /docs**. A public repository on GitHub Free is sufficient.
+The build generates `docs/index.html` and `docs/.nojekyll`. Commit the generated page alongside the source. Keep GitHub Pages disabled in this source repository. To publish an update, copy the generated `docs/index.html` to `subsync/index.html` on `main` in both `StanMiletskiy/perfectintegers-site` and `StanMiletskiy/perfectintegers-pages`. The latter serves [perfectintegers.com/subsync/](https://perfectintegers.com/subsync/).
 
 ## Upstream review
 
