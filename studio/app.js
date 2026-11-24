@@ -250,8 +250,8 @@
       } catch {fallback();}
     });
   }
-  function timingOnly(cues) {
-    return cues.map(({start,end})=>({start,end}));
+  function cueData(cues, includeText) {
+    return cues.map(({start,end,text})=>includeText?{start,end,text}:{start,end});
   }
   function signedSeconds(ms) {
     return (ms>=0?'+':'−')+(Math.abs(ms)/1000).toFixed(3)+' s';
@@ -276,8 +276,8 @@
         detail=pairs.length===1?'Applied to every cue.':'Adjusted using your matching times.';
       } else {
         const ref=tracks.ref;
-        const job={cues:timingOnly(parsed.cues),kind:ref.kind};
-        if (ref.parsed) job.reference=timingOnly(ref.parsed.cues);
+        const job={cues:cueData(parsed.cues,!!ref.parsed),kind:ref.kind};
+        if (ref.parsed) job.reference=cueData(ref.parsed.cues,true);
         else {job.file=ref.file; job.track=ref.selected;}
         message(ref.parsed?'Comparing timing patterns…':'Reading the selected track…');
         const answer=await referenceCache.run(job, fraction=>{
@@ -286,7 +286,7 @@
           if (Number.isFinite(progress)) message(progress>=100?'Comparing timing patterns…':'Reading reference · '+progress+'%');
         },controller.signal,runWorker);
         if (running!==controller) return;
-        if (!Number.isFinite(answer.scale) || answer.scale<=0 || !Number.isFinite(answer.offsetMs)) throw Error(answer.reason || 'No timing estimate. Use manual anchors or choose another reference.');
+        if (!Number.isFinite(answer.scale) || answer.scale<=0 || !Number.isFinite(answer.offsetMs)) throw Error(answer.reason || 'Could not estimate the timing. Try a reference from the same release.');
         map=SyncSrt.fitOpening(parsed.cues,time=>SyncAlign.mapTime(answer,time));
         const edits=answer.edits || [], review=answer.reviewRanges || [];
         exportable=!!answer.reliable;
@@ -295,7 +295,12 @@
         const sign=drift>=0?'+':'−';
         title=(edits.length?'Starting offset ':'Offset ')+signedSeconds(answer.offsetMs);
         detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · timing match score '+Math.round(answer.score*100)+'%';
-        if (!exportable) message(answer.reason || 'Weak timing match. Try manual anchors or another reference.','error');
+        if (answer.dialoguePoints) {
+          title='Matched subtitle dialogue';
+          const percent=!answer.exactTimings && answer.score>=0.9995?'>99.9':(answer.score*100).toFixed(1);
+          detail='Timing match score '+percent+'% · '+answer.matchedLines.toLocaleString()+' of '+parsed.cues.length.toLocaleString()+' cues matched by text';
+        }
+        if (!exportable) message(answer.reason || 'Weak timing match. Try a reference from the same release.','error');
       }
       let text;
       if (exportable) text=SyncSrt.render(parsed,map);

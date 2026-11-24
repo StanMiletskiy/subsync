@@ -16,8 +16,8 @@
     return [cues[0].start, cues.reduce((v, c) => Math.max(v, c.end), cues[0].end)];
   }
 
-  function cueActivity(cues, step) {
-    const [origin, end] = extent(cues);
+  function cueActivity(cues, step, bounds = extent(cues)) {
+    const [origin, end] = bounds;
     const values = new Float32Array(Math.ceil((end - origin) / step) + 1);
     const delta = new Int32Array(values.length + 1);
     for (const cue of cues) {
@@ -316,6 +316,7 @@
   }
 
   function mapTime(fit, ms) {
+    if (fit.dialoguePoints) return mapDialogue(fit.dialoguePoints, ms);
     let time = ms * fit.scale + fit.offsetMs;
     for (const edit of fit.edits || []) {
       if (ms < edit.sourceMs) break;
@@ -658,6 +659,87 @@
     };
   }
 
+  // Use both ends of the same cue. Independent nearest starts and ends can
+  // falsely match a split subtitle or an overlay to a line in another language.
+  function pairedResiduals(cues, reference, fit) {
+    const starts = reference.map(cue => cue.start);
+    const counts = new Uint32Array(reference.length);
+    const pairs = cues.map(cue => {
+      const start = cue.start * fit.scale + fit.offsetMs, end = cue.end * fit.scale + fit.offsetMs;
+      const lo = lowerBound(starts, start - 800), hi = lowerBound(starts, start + 801);
+      if (hi - lo > 16) return null;
+      let match = null;
+      for (let j = lo; j < hi; j++) {
+        const left = starts[j] - start, right = reference[j].end - end;
+        if (Math.abs(left - right) > 80 || Math.abs(right) > 800) continue;
+        if (match) return null;
+        match = { j, offset: (left + right) / 2 };
+      }
+      if (match) counts[match.j]++;
+      return match;
+    });
+    return pairs.map(pair => pair && counts[pair.j] === 1 ? pair.offset : NaN);
+  }
+
+  // Even-numbered cues propose a sustained subsecond shift. Interleaved
+  // cues must independently reproduce it, with a clear cut at both ends.
+  function refineSmallSections(cues, reference, source, ref, step, segments, fit) {
+    if (!fit.reliable || fit.edits.length || cues.length < 24) return fit;
+    const residuals = pairedResiduals(cues, reference, fit);
+    const edits = [], confirmedSections = [], latestEnd = [];
+    let occupied = -Infinity;
+    for (const cue of cues) {
+      latestEnd.push(occupied);
+      occupied = Math.max(occupied, cue.end);
+    }
+    const agrees = (i, offset) => Math.abs(residuals[i] - offset) <= 65;
+    function safeCut(i, delta, outside) {
+      if (i === 0 || i === cues.length) return true;
+      const gap = cues[i].start - latestEnd[i];
+      return gap > 0 && gap * fit.scale + delta >= 0 && agrees(outside, 0);
+    }
+    for (let i = 0; i < cues.length; i += 2) {
+      const seed = residuals[i];
+      if (!Number.isFinite(seed) || Math.abs(seed) < 180) continue;
+      const samples = [seed];
+      let first = i, last = i;
+      for (let j = first + 2; j < cues.length; j += 2) {
+        if (!agrees(j, seed)) {
+          // A split or omitted reference line can leave a single unpaired
+          // training cue between two matching ones.
+          if (!Number.isFinite(residuals[j]) && agrees(j + 2, seed)) continue;
+          break;
+        }
+        last = j;
+        samples.push(residuals[j]);
+      }
+      i = last;
+      const heldOutCount = (last - first) / 2;
+      if (samples.length < 8 || samples.length < 0.85 * (heldOutCount + 1) ||
+          cues[last].start - cues[first].start < 30000) continue;
+      const shift = median(samples);
+      // The two edge cues can help locate the cut, so exclude them from
+      // independent validation. Unpaired validation cues count as misses.
+      let confirmed = 0;
+      for (let j = first + 1; j < last; j += 2) if (agrees(j, shift)) confirmed++;
+      if (confirmed < heldOutCount * 0.85) continue;
+      if (agrees(first - 1, shift)) first--;
+      if (agrees(last + 1, shift)) last++;
+      if (!safeCut(first, shift, first - 1) || !safeCut(last + 1, -shift, last + 1)) continue;
+      edits.push({ sourceMs: cues[first].start, deltaMs: shift });
+      if (last + 1 < cues.length) edits.push({ sourceMs: cues[last + 1].start, deltaMs: -shift });
+      confirmedSections.push({ start: cues[first].start, end: cues[last].end });
+    }
+    if (!edits.length) return fit;
+    const corrected = evaluate(source, ref, step, { scale: fit.scale, offset: fit.offsetMs, edits }, 1, segments);
+    if (corrected.r <= fit.score + 0.001 || corrected.segments !== segments ||
+        corrected.weakest < 0.25 || corrected.coverage < 0.76) return fit;
+    const reviewRanges = fit.reviewRanges.filter(range => !confirmedSections.some(section =>
+      range.startMs >= section.start && range.endMs <= section.end));
+    return { ...fit, edits, score: clamp(corrected.r, 0, 1), reviewRanges,
+      reason: "Matching cue boundaries confirm a sustained local timing change." };
+  }
+
   // An acoustic tail needs a repeated, unambiguous alternative and a definite
   // cut between neighbouring cues. A strong tail alone cannot place the cut.
   function audioTail(cues, source, ref, step, fit, windows, width) {
@@ -750,11 +832,141 @@
     return withRanges(tail || fit, ranges);
   }
 
+  function dialogueKey(text) {
+    if (typeof text !== 'string' || !text) return '';
+    return (text.normalize('NFC').replace(/<\/?(?:i|b|u|font)\b[^>]*>/gi, '')
+      .toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) || []).join(' ');
+  }
+
+  function uniqueLines(keys) {
+    const indices = new Map();
+    keys.forEach((key, i) => {
+      if (/\p{L}/u.test(key)) indices.set(key, indices.has(key) ? -1 : i);
+    });
+    return indices;
+  }
+
+  function similarity(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    // Character trigrams also work for scripts without spaces and inflected words.
+    const grams = s => {
+      const chars = Array.from(s), set = new Set();
+      for (let i = 2; i < chars.length; i++) set.add(chars[i-2] + chars[i-1] + chars[i]);
+      return set;
+    };
+    const left = grams(a), right = grams(b);
+    let common = 0;
+    for (const gram of left) if (right.has(gram)) common++;
+    return common < 5 ? 0 : 2 * common / (left.size + right.size);
+  }
+
+  // Repeated replies and lightly edited lines need unique surrounding dialogue.
+  // With different cue counts, leave the intervening passage to the time map.
+  function matchPassage(a, b, pairs, sourceLo, sourceHi, refLo, refHi) {
+    const count = sourceHi - sourceLo - 1;
+    if (count < 1 || count > 7 || count !== refHi - refLo - 1) return;
+    const left = a.slice(sourceLo + 1, sourceHi), right = b.slice(refLo + 1, refHi);
+    const identical = left.every((text, i) => text && text === right[i]);
+    const scores = identical ? null : left.map(text => right.map(other => similarity(text, other)));
+    for (let i = 0; i < count; i++) {
+      // A near match must beat alternatives on both sides; a reordered line
+      // or a repeated phrase cannot win purely because of its cue number.
+      if (!identical && (scores[i][i] < 0.65 || scores.some((row, j) => j !== i &&
+          Math.max(row[i], scores[i][j]) >= scores[i][i] - 0.12))) continue;
+      pairs.push([sourceLo + i + 1, refLo + i + 1]);
+    }
+  }
+
+  function dialogueMatches(source, reference) {
+    const a = source.map(c => dialogueKey(c.text)), b = reference.map(c => dialogueKey(c.text));
+    // Cue numbers and numbered SDH labels alone cannot establish dialogue identity.
+    const identity = key => key.replace(/\p{N}+/gu, '#');
+    const sourceIndex = uniqueLines(a.map(identity)), refIndex = uniqueLines(b.map(identity));
+    const pairs = [];
+    let lastSource = -1, lastRef = -1, anchors = 0;
+    for (let i = 0; i < a.length; i++) {
+      const id = identity(a[i]), j = refIndex.get(id);
+      if (sourceIndex.get(id) !== i || j == null || j < 0 || a[i] !== b[j]) continue;
+      if (j <= lastRef) return null; // Reordered scenes need the ordinary timing analysis.
+      if (lastSource >= 0) matchPassage(a, b, pairs, lastSource, i, lastRef, j);
+      pairs.push([i, j]);
+      lastSource = i;
+      lastRef = j;
+      anchors++;
+    }
+    return anchors >= 8 && anchors >= 0.5 * Math.max(a.length, b.length) ? pairs : null;
+  }
+
+  function mapDialogue(points, time) {
+    let lo = 0, hi = points.length - 1;
+    if (time <= points[lo][0]) return time + points[lo][1] - points[lo][0];
+    if (time >= points[hi][0]) return time + points[hi][1] - points[hi][0];
+    while (hi - lo > 1) {
+      const mid = Math.floor((hi + lo) / 2);
+      if (points[mid][0] <= time) lo = mid;
+      else hi = mid;
+    }
+    const [x, y] = points[lo], [nextX, nextY] = points[hi];
+    return y + (time - x) * (nextY - y) / (nextX - x);
+  }
+
+  function dialogueFit(cues, refs, step, segments) {
+    if (!cues.some(c => c.text) || !refs.some(c => c.text)) return null;
+    const pairs = dialogueMatches(cues, refs);
+    if (!pairs || pairs.length < 0.85 * Math.max(cues.length, refs.length)) return null;
+    const firstSource = pairs[0][0], lastSource = pairs.at(-1)[0];
+    // Keep a short opening title or closing credit at the nearest supported
+    // offset. A whole unpaired scene needs the ordinary timing analysis.
+    if (firstSource > 2 || cues.length - lastSource - 1 > 2 ||
+        (firstSource && cues[firstSource].start - cues[0].start > 30000) ||
+        (lastSource !== cues.length - 1 && cues.at(-1).end - cues[lastSource].end > 30000)) return null;
+    const boundaries = [];
+    for (let k = 0; k < pairs.length; k++) {
+      const [i, j] = pairs[k];
+      if (k && i > pairs[k - 1][0] + 1) {
+        const [previousI, previousJ] = pairs[k - 1];
+        const sourceGap = cues[i].start - cues[previousI].end;
+        const refGap = refs[j].start - refs[previousJ].end;
+        // Interpolate only short, bracketed passages at compatible rates. A large
+        // change in the available interval can be an inserted or removed scene.
+        if (i - previousI > 8 || j - previousJ > 8 || sourceGap <= 0 || refGap <= 0 ||
+            Math.abs(sourceGap - refGap) > Math.max(900, 0.35 * Math.min(sourceGap, refGap))) return null;
+      }
+      boundaries.push([cues[i].start, refs[j].start], [cues[i].end, refs[j].end]);
+    }
+    boundaries.sort((a, b) => a[0] - b[0]);
+    const points = [];
+    for (const [x, y] of boundaries) {
+      const prev = points.at(-1);
+      if (prev && x === prev[0] && y === prev[1]) continue;
+      if (prev && (x <= prev[0] || y <= prev[1])) return null;
+      points.push([x, y]);
+    }
+    const mapped = cues.map(c => ({
+      start: Math.round(mapDialogue(points, c.start)), end: Math.round(mapDialogue(points, c.end))
+    }));
+    if (mapped.some(c => c.start < 0 || c.end <= c.start)) return null;
+    // Measure the exported timeline, including inferred cues and reference-only
+    // material. Text correspondence selects the mapping, never its score.
+    const mappedBounds = extent(mapped), refBounds = extent(refs);
+    const bounds = [Math.min(mappedBounds[0], refBounds[0]), Math.max(mappedBounds[1], refBounds[1])];
+    const actual = cueActivity(mapped, step, bounds), expected = cueActivity(refs, step, bounds);
+    const agreement = evaluate(actual, expected, step, {scale: 1, offset: 0}, 1, segments);
+    const exact = mapped.length === refs.length && mapped.every((cue, i) =>
+      cue.start === refs[i].start && cue.end === refs[i].end);
+    if (!exact && (agreement.segments !== segments || agreement.weakest < 0.65 || agreement.r < 0.8)) return null;
+    const first = points[0], last = points.at(-1);
+    const scale = (last[1] - first[1]) / (last[0] - first[0]);
+    return {dialoguePoints: points, matchedLines: pairs.length, scale,
+      offsetMs: Math.round(first[1] - scale * first[0]), score: exact ? 1 : clamp(agreement.r, 0, 1), exactTimings: exact,
+      reliable: true, edits: [], reviewRanges: []};
+  }
+
   function align(input, reference, options = {}) {
     if (!Array.isArray(input)) return failure("Choose a subtitle track to sync.");
     const cues = ordered(input);
     if (cues.length < 4) return failure("At least four dialogue cues are needed for automatic matching.");
-    if (hasRepeatingPattern(cues)) return failure("The cue pattern repeats. Use matching dialogue lines as manual anchors.");
     const audio = !Array.isArray(reference);
     const refCues = audio ? null : ordered(reference);
     if (audio && (!reference || !reference.activity || !(reference.stepMs > 0) || !reference.activity.length))
@@ -765,13 +977,16 @@
     const maxSpan = Math.max(span, refBounds[1] - refBounds[0]);
     if (!Number.isFinite(maxSpan) || maxSpan <= 0) return failure("The track duration is invalid.");
     const step = Math.max(100, Math.ceil(maxSpan / 120000), audio ? reference.stepMs : 0);
+    const segments = span >= 180000 && cues.length >= 25 ? 4 : 1;
+    const textFit = refCues && dialogueFit(cues, refCues, step, segments);
+    if (textFit) return textFit;
+    if (hasRepeatingPattern(cues)) return failure("The cue pattern repeats, so the offset is ambiguous. Try another dialogue track from this release.");
     const source = cueActivity(cues, step), ref = audio ? audioActivity(reference, step) : cueActivity(refCues, step);
     const windows = findWindows(cues, source, ref, step);
     if (!windows.length) return failure("No clear dialogue pattern was found in the reference.");
     const candidates = propose(windows, first, span);
     if (!candidates.length) return failure("The reference did not yield a consistent timing match.");
     const stride = Math.max(1, Math.floor(source.values.length / 16000));
-    const segments = span >= 180000 && cues.length >= 25 ? 4 : 1;
     for (const c of candidates) c.r = evaluate(source, ref, step, c, stride, segments).r;
     candidates.sort((a, b) => b.r - a.r);
     let best = refine(source, ref, step, candidates[0], span, stride, segments);
@@ -792,8 +1007,8 @@
     const reliable = score >= minimumScore && result.coverage >= 0.76 && supported && continuous && !rival;
     let reason = "The overall offset and playback rate are supported by the dialogue timing.";
     if (!reliable) {
-      reason = rival ? "Several timings fit this pattern. Check the proposed timing or set manual anchors."
-        : "The tracks do not show a consistent dialogue match. Try another reference or set manual anchors.";
+      reason = rival ? "Several timings fit this pattern. Try another dialogue track from this release."
+        : "The tracks do not show a consistent dialogue match. Try a reference from the same release.";
     }
     const fit = { offsetMs: Math.round(best.offset), scale: best.scale, score, reliable, reason, edits: [], reviewRanges: [] };
     if (refCues) {
@@ -809,10 +1024,11 @@
           const starts = refCues.map(c => c.start), ends = refCues.map(c => c.end).sort((a, b) => a - b);
           return shortEdgeReview(cues, starts, ends, local) || local;
         }
-        return local;
+        return refineSmallSections(cues, refCues, source, ref, step, segments, local);
       }
     }
-    return checkLocalActivity(cues, source, ref, step, fit, audio);
+    const checked = checkLocalActivity(cues, source, ref, step, fit, audio);
+    return refCues ? refineSmallSections(cues, refCues, source, ref, step, segments, checked) : checked;
   }
 
   const api = { align, mapTime };
