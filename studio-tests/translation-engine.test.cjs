@@ -174,3 +174,28 @@ test('a supported pair that Chrome cannot initialize has a retryable, language-s
   const env = environment({makeNative() { throw new DOMException('Unable to create translator for the given source and target language.', 'NotSupportedError'); }});
   await assert.rejects(start(await plan('en','ru',env.scope),{scope:env.scope}), /English → Russian language pack.*retry/);
 });
+
+test('restores explicit terminal force only in the final language on all local routes', async () => {
+  for (const [source, target, original, raw, want, mode] of [
+    ['en','ru','Yes.','да','Да.','prepare'],
+    ['en','es','Yes?','¿Sí!','¿Sí?','context'],
+    ['ru','es','Правда?','«De verdad»','«De verdad?»','review'],
+    ['ru','ar','Правда?','«حقاً»','«حقاً؟»','standard'],
+    ['en','zh','Wait.','等等！','等等。','prepare'],
+    ['en','ja','Wait...','「待って」','「待って…」','prepare'],
+    ['en','hi','Yes.','हाँ','हाँ।','prepare'],
+    ['en','ru','Close the door.','Закрой Дверь.','Закрой Дверь.','prepare'],
+    ['en','ru','yes','да','да','prepare'],
+    ['en','ru','No…','нет!','Нет…','prepare'],
+    ['zh','en','等一下。','Wait。','Wait.','review'],
+  ]) {
+    const env = environment({
+      generate: batch=>JSON.stringify(batch.requested.map(({id})=>({id,text:raw}))),
+      makeNative:()=>({translate:async()=>raw,destroy(){}}),
+    });
+    const engine = await start(await plan(source,target,env.scope),{scope:env.scope});
+    assert.equal(engine.mode,mode);
+    assert.deepEqual(await engine.translate([{id:1,cue:1,text:original}]),[want]);
+    engine.destroy();
+  }
+});

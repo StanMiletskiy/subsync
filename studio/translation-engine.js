@@ -116,6 +116,9 @@
       active.throwIfAborted();
       onMode?.(mode, 0);
       const output = [], drafts = new Map();
+      function append(text) {
+        output.push(finishLine(units[output.length].text, text, selection.target));
+      }
       async function draft(index) {
         if (!drafts.has(index)) {
           active.throwIfAborted();
@@ -128,7 +131,7 @@
       for (let index = 0; index < units.length;) {
         active.throwIfAborted();
         if (mode === 'standard') {
-          output.push(await draft(index++));
+          append(await draft(index++));
         } else {
           const end = batchEnd(units, index);
           const rows = [];
@@ -160,9 +163,9 @@
           if (mode === 'prepare') {
             for (const text of translated) {
               active.throwIfAborted();
-              output.push(cleanText(await translator.translate(text, {signal: active})));
+              append(cleanText(await translator.translate(text, {signal: active})));
             }
-          } else output.push(...translated);
+          } else translated.forEach(append);
           index = end;
         }
         active.throwIfAborted();
@@ -196,6 +199,34 @@
       meaningful.add(text);
     }
     return meaningful.size >= 3;
+  }
+
+  // Models can drop a short answer's period or turn a statement into an
+  // exclamation. Restore explicit terminal force after the final language pass.
+  const ending = /([.!?…。！？؟۔।,;:，、；：،؛]*)([\s"'’”»›」』】）)\]]*)$/u;
+  const force = marks => marks.replace(/\.{3}/g, '…').replace(/[。۔।]/g, '.')
+    .replace(/[？؟]/g, '?').replace(/！/g, '!');
+  function finishLine(source, translated, language) {
+    const sourceTail = ending.exec(source);
+    const original = sourceTail[1];
+    if (!original || !/^[.!?…。！？؟۔।]+$/u.test(original)) return translated;
+    const target = language.split('-')[0];
+    const tail = ending.exec(translated);
+    const body = translated.slice(0, tail.index);
+    let stem = body;
+    if (target === 'ru' && /^\p{Lu}\p{L}*$/u.test(source.slice(0, sourceTail.index)) &&
+        /^[а-яё]+$/u.test(body)) stem = body[0].toUpperCase() + body.slice(1);
+    const wanted = force(original);
+    let marks = wanted;
+    if (target === 'zh' || target === 'ja') {
+      marks = marks.replace(/[.?!]/g, c => ({'.':'。','?':'？','!':'！'})[c]);
+    } else if (target === 'ar') marks = marks.replace(/\?/g, '؟');
+    else if (target === 'hi') marks = marks.replace(/\./g, '।');
+    if (original.includes('...') && !['zh','ja'].includes(target)) marks = marks.replace(/…/g, '...');
+    if (tail[1] === marks || (wanted === '…' && force(tail[1]) === wanted)) return stem + tail[1] + tail[2];
+    stem = stem.trimEnd();
+    if (target === 'fr' && /^[!?]/u.test(marks)) stem += '\u202f';
+    return stem + marks + tail[2];
   }
 
   function cleanText(raw) {
