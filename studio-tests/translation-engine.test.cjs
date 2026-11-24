@@ -41,7 +41,7 @@ const units = Array.from({length: 23}, (_, i) => ({id: i + 10, cue: i + 1, text:
 
 test('probes mode using local APIs and both languages, including future runtime languages', async () => {
   for (const [a, b, expected] of [
-    ['en', 'es', 'context'], ['en', 'ru', 'prepare'], ['ru', 'es', 'review'], ['ru', 'th', 'standard'],
+    ['en', 'es', 'context'], ['en', 'ru', 'standard'], ['ru', 'es', 'review'], ['ru', 'th', 'standard'],
   ]) {
     const {scope} = environment();
     assert.equal((await plan(a, b, scope)).mode, expected);
@@ -74,16 +74,19 @@ test('batches crop context, preserve IDs, and clone clean sessions per window', 
   assert.deepEqual(calls.closes.slice(-2), ['nano','translator']);
 });
 
-test('context is prepared in the source language for Russian and reviewed in supported target languages', async () => {
-  for (const [source, target, prefix, mode] of [['en','ru','T N ','prepare'],['ru','es','N T ','review']]) {
+test('uses the untouched source for Russian and reviews the local draft in supported target languages', async () => {
+  for (const [source, target, prefix, mode] of [['en','ru','T ','standard'],['ru','es','N T ','review']]) {
     const {scope, calls} = environment();
     const engine = await start(await plan(source, target, scope), {scope});
     const result = await engine.translate(units);
     assert.equal(engine.mode, mode);
     assert.deepEqual(result, units.map(unit => prefix + unit.text));
-    const job = calls.prompts[1].batch;
-    if (mode === 'prepare') assert.equal(job.before[0].previousTranslation, undefined);
+    if (mode === 'standard') {
+      assert.deepEqual(calls.native, units.map(unit => unit.text));
+      assert.deepEqual(calls.creates, ['translator']);
+    }
     if (mode === 'review') {
+      const job = calls.prompts[1].batch;
       assert.ok(job.requested.every(r => r.text.startsWith('T ')));
       assert.ok(job.after.every(r => r.text.startsWith('T ')));
       assert.equal(calls.native.length, units.length);
@@ -137,7 +140,7 @@ test('cancellation and model startup failures release resources without a partia
   await assert.rejects(onlyNano.translate(units));
   onlyNano.destroy();
   const failed = environment({makeNative() { throw Error('language pack offline'); }});
-  await assert.rejects(start(await plan('en','ru',failed.scope),{scope:failed.scope}),/language pack offline/);
+  await assert.rejects(start(await plan('ru','es',failed.scope),{scope:failed.scope}),/language pack offline/);
   assert.ok(failed.calls.closes.includes('nano'));
 });
 
@@ -177,16 +180,16 @@ test('a supported pair that Chrome cannot initialize has a retryable, language-s
 
 test('restores explicit terminal force only in the final language on all local routes', async () => {
   for (const [source, target, original, raw, want, mode] of [
-    ['en','ru','Yes.','да','Да.','prepare'],
+    ['en','ru','Yes.','да','Да.','standard'],
     ['en','es','Yes?','¿Sí!','¿Sí?','context'],
     ['ru','es','Правда?','«De verdad»','«De verdad?»','review'],
     ['ru','ar','Правда?','«حقاً»','«حقاً؟»','standard'],
-    ['en','zh','Wait.','等等！','等等。','prepare'],
-    ['en','ja','Wait...','「待って」','「待って…」','prepare'],
-    ['en','hi','Yes.','हाँ','हाँ।','prepare'],
-    ['en','ru','Close the door.','Закрой Дверь.','Закрой Дверь.','prepare'],
-    ['en','ru','yes','да','да','prepare'],
-    ['en','ru','No…','нет!','Нет…','prepare'],
+    ['en','zh','Wait.','等等！','等等。','standard'],
+    ['en','ja','Wait...','「待って」','「待って…」','standard'],
+    ['en','hi','Yes.','हाँ','हाँ।','standard'],
+    ['en','ru','Close the door.','Закрой Дверь.','Закрой дверь.','standard'],
+    ['en','ru','yes','да','да','standard'],
+    ['en','ru','No…','нет!','Нет…','standard'],
     ['zh','en','等一下。','Wait。','Wait.','review'],
   ]) {
     const env = environment({
@@ -196,6 +199,82 @@ test('restores explicit terminal force only in the final language on all local r
     const engine = await start(await plan(source,target,env.scope),{scope:env.scope});
     assert.equal(engine.mode,mode);
     assert.deepEqual(await engine.translate([{id:1,cue:1,text:original}]),[want]);
+    engine.destroy();
+  }
+});
+
+test('Russian sound checks repair a lost hearing verb or referent while preserving register and longer dialogue', async () => {
+  const cases = [
+    ['Can you hear me?', 'Слышень Меня?', 'Меня слышно?'],
+    ['Can you hear us?', 'Вы слушаете?', 'Нас слышно?'],
+    ['Can you hear me?', 'Вы Меня слышите?', 'Вы меня слышите?'],
+    ['Can you hear me?', 'Ты меня слышишь?', 'Ты меня слышишь?'],
+    ['Can you hear me?', 'Вам меня слышно?', 'Вам меня слышно?'],
+    ['Can you hear me?', 'Ты можешь меня слышать?', 'Ты можешь меня слышать?'],
+    ['Can you hear me?', 'Слышите ли вы меня?', 'Слышите ли вы меня?'],
+    ['Can you hear me?', 'Вы меня не слышите?', 'Меня слышно?'],
+    ['Can you hear me?', 'Я слышу, как ты слышишь меня?', 'Меня слышно?'],
+    ['Can you hear me?', 'Слышишь меня?', 'Слышишь меня?'],
+    ['Can you hear us?', 'Вы Нас слышите?', 'Вы нас слышите?'],
+    ['Can you hear me now?', 'Ты меня теперь слышишь?', 'Ты меня теперь слышишь?'],
+    ['Can you hear me, sir?', 'Вы меня слышите, сэр?', 'Вы меня слышите, сэр?'],
+    ['Do you hear me?', 'Ты меня слышишь?', 'Ты меня слышишь?'],
+    ['Did you hear me?', 'Ты меня слышал?', 'Ты меня слышал?'],
+    ['Did you see ME?', 'Ты видел МЕНЯ?', 'Ты видел МЕНЯ?'],
+    ['I saw the Door.', 'Я видела Дверь.', 'Я видела Дверь.'],
+    ['Open the window!', 'Откройте Окно!', 'Откройте окно!'],
+    ['Tell Anna to open the window.', 'Скажи Анне открыть окно.', 'Скажи Анне открыть окно.'],
+  ];
+  for (const [source, native, expected] of cases) {
+    const env = environment({makeNative:()=>({translate:async()=>native,destroy(){}})});
+    const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+    assert.deepEqual(await engine.translate([{id:0,cue:1,line:15,text:source}]), [expected], source);
+    engine.destroy();
+  }
+});
+
+test('separate physical lines in a multi-speaker cue get individual translation and whole-utterance checks', async () => {
+  const source = [{id:0,cue:1,line:10,text:'Can you hear me?'},{id:1,cue:1,line:35,text:'Yes.'}];
+  const calls = [];
+  const env = environment({makeNative:()=>({async translate(text) {
+    calls.push(text); return text.startsWith('Can')?'Слышень Меня?':'да';
+  },destroy(){}})});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  assert.deepEqual(await engine.translate(source), ['Меня слышно?', 'Да.']);
+  assert.deepEqual(calls,['Can you hear me?', 'Yes.']);
+  engine.destroy();
+});
+
+test('uses local context only for unfinished pieces of a single physical line', async () => {
+  const source = [
+    {id:0,cue:1,line:20,text:'I still have'}, {id:1,cue:1,line:20,text:'3 tickets.'},
+    {id:2,cue:1,line:20,text:'Come along.'}, {id:3,cue:2,line:90,text:'No.'},
+  ];
+  const calls = [];
+  const replies = {'I still have':'Мне ещё принадлежит','3 tickets.':'3 билета.',
+    'Come along.':'Пойдём.','No.':'Нет.'};
+  const env = environment({makeNative:()=>({async translate(text) {
+    calls.push(text);
+    return text.startsWith('[[')?'[[1]] У меня ещё есть\n[[2]] 3 билета.':replies[text];
+  }, destroy(){}})});
+  const engine = await start(await plan('en','ru',env.scope),{scope:env.scope});
+  assert.deepEqual(await engine.translate(source), ['У меня ещё есть','3 билета.','Пойдём.','Нет.']);
+  assert.deepEqual(calls,['[[1]] I still have\n[[2]] 3 tickets.','Come along.','No.']);
+  engine.destroy();
+});
+
+test('damaged markers, shifted numbers and untranslated marked groups retry individual originals', async () => {
+  const source = [{id:0,cue:1,line:7,text:'Wait for 2'}, {id:1,cue:1,line:7,text:'more hours.'}];
+  for (const bad of ['[[1]] encore', '[[2]] heures [[1]] 2', '[[1]] attends [[2]] 2 heures de plus',
+    '[[1]] Wait for 2\n[[2]] more hours.']) {
+    const calls = [];
+    const env = environment({supported:[],makeNative:()=>({async translate(text) {
+      calls.push(text);
+      return text.startsWith('[[')?bad:text.includes('2')?'attends 2':'heures de plus.';
+    },destroy(){}})});
+    const engine = await start(await plan('en','fr',env.scope),{scope:env.scope});
+    assert.deepEqual(await engine.translate(source), ['attends 2', 'heures de plus.']);
+    assert.deepEqual(calls.slice(1), source.map(unit=>unit.text));
     engine.destroy();
   }
 });

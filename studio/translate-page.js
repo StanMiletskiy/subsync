@@ -9,9 +9,8 @@
   ];
   const modes = {
     context: 'Gemini Nano uses nearby dialogue for context.',
-    prepare: 'Gemini Nano helps clarify the dialogue before Chrome translates it.',
-    review: 'Gemini Nano reviews Chrome’s translation with nearby dialogue for context.',
-    standard: 'Chrome’s local translator translates individual subtitle segments.',
+    review: 'Gemini Nano edits the translated dialogue alongside nearby translated lines.',
+    standard: 'Chrome translates directly from the original dialogue.',
   };
   function outputEncoding(bytes, selected) {
     const header = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2));
@@ -175,7 +174,7 @@
         const session = await engine.start(plan, {signal, scope, onStatus({component, progress: fraction}) {
           if (task !== current) return;
           const percent = Math.round(fraction * 100);
-          if (component === 'nano' && fraction === 1 && (plan.mode === 'prepare' || plan.mode === 'review')) {
+          if (component === 'nano' && fraction === 1 && plan.mode === 'review') {
             message('Gemini Nano is ready. Preparing the language pair…');
             return;
           }

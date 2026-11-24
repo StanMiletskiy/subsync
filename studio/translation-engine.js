@@ -41,12 +41,8 @@
     } else if (translator !== unavailable) {
       // Probe the installed model's actual languages. New Chrome models can enable
       // additional pairs without this application naming a model version.
-      const [prepare, review] = await Promise.all([
-        check(scope.LanguageModel, textOptions(source, source)),
-        check(scope.LanguageModel, textOptions(target, target)),
-      ]);
-      if (prepare !== unavailable) Object.assign(result, {mode: 'prepare', nanoStatus: prepare});
-      else if (review !== unavailable) Object.assign(result, {mode: 'review', nanoStatus: review});
+      const review = await check(scope.LanguageModel, textOptions(target, target));
+      if (review !== unavailable) Object.assign(result, {mode: 'review', nanoStatus: review});
       else result.mode = 'standard';
     }
     result.needsDownload = [result.nanoStatus, translator].some(value => value === 'downloadable' || value === 'downloading');
@@ -56,16 +52,13 @@
   function nanoConfig(selection) {
     const {mode, source, target} = selection;
     const input = mode === 'review' ? target : source;
-    const output = mode === 'prepare' ? source : target;
     const sourceName = languages.of(source), targetName = languages.of(target);
     const instructions = {
       context: 'Translate the selected dialogue from ' + sourceName + ' into ' + targetName + '.',
-      prepare: 'Prepare the selected ' + sourceName + ' dialogue for a translation into ' + targetName +
-        '. Write in ' + sourceName + '. By default return the original wording exactly. When context clearly resolves an ambiguous idiom or sense, express just that sense naturally in the same language. Keep intentional wordplay and ambiguity. Never add character names, motives or explanatory glosses.',
       review: 'You are editing a first-pass translation into ' + targetName + ' from ' + sourceName +
         '. The records and context are translated drafts in ' + targetName + '. Smooth unnatural phrasing or inconsistent address only when there is evidence in the scene. Preserve the draft when a better reading is uncertain.',
     };
-    return {...textOptions(input, output), initialPrompts: [{role: 'system', content: editorBrief + ' ' + instructions[mode]}]};
+    return {...textOptions(input, target), initialPrompts: [{role: 'system', content: editorBrief + ' ' + instructions[mode]}]};
   }
 
   function downloadMonitor(component, onStatus) {
@@ -116,8 +109,14 @@
       active.throwIfAborted();
       onMode?.(mode, 0);
       const output = [], drafts = new Map();
+      let failedWindows = 0;
       function append(text) {
-        output.push(finishLine(units[output.length].text, text, selection.target));
+        const i = output.length, unit = units[i];
+        if (selection.source === 'en' && selection.target === 'ru') {
+          const sameLine = other => other?.cue === unit.cue && (unit.line == null || other.line === unit.line);
+          text = russianDialogue(unit.text, text, !sameLine(units[i - 1]) && !sameLine(units[i + 1]));
+        }
+        output.push(finishLine(unit.text, text, selection.target));
       }
       async function draft(index) {
         if (!drafts.has(index)) {
@@ -131,7 +130,15 @@
       for (let index = 0; index < units.length;) {
         active.throwIfAborted();
         if (mode === 'standard') {
-          append(await draft(index++));
+          const end = nativeWindowEnd(units, index);
+          let scene = null;
+          if (end > index + 1 && failedWindows < 2 && !drafts.has(index)) {
+            scene = await translateWindow(translator, units.slice(index, end), active);
+            failedWindows = scene ? 0 : failedWindows + 1;
+          }
+          if (scene) scene.forEach(append);
+          else for (let i = index; i < end; i++) append(await draft(i));
+          index = end;
         } else {
           const end = batchEnd(units, index);
           const rows = [];
@@ -142,7 +149,7 @@
             const record = {id: unit.id, cue: unit.cue, text};
             // Already completed dialogue is shown only as context, in a language
             // the selected Nano session is permitted to read.
-            if (i < index && mode !== 'prepare') record.previousTranslation = output[i];
+            if (i < index) record.previousTranslation = output[i];
             rows.push(record);
           }
           let translated;
@@ -160,12 +167,7 @@
             onMode?.(mode, index);
             continue;
           }
-          if (mode === 'prepare') {
-            for (const text of translated) {
-              active.throwIfAborted();
-              append(cleanText(await translator.translate(text, {signal: active})));
-            }
-          } else translated.forEach(append);
+          translated.forEach(append);
           index = end;
         }
         active.throwIfAborted();
@@ -174,6 +176,85 @@
       return output;
     }
     return {get mode() { return mode; }, translate, destroy};
+  }
+
+  function nativeWindowEnd(units, start) {
+    let end = start + 1, size = units[start].text.length;
+    while (end < units.length && end - start < 4) {
+      const next = units[end], previous = units[end - 1];
+      if (next.line == null || next.cue !== previous.cue || next.line !== previous.line ||
+          /[.!?…;:。！？؟।][\s\p{Pe}\p{Pf}]*$/u.test(previous.text) || size + next.text.length > 700) break;
+      size += units[end++].text.length;
+    }
+    return end;
+  }
+
+  async function translateWindow(translator, units, signal) {
+    // Chrome's native translator has no separate context argument. Send only
+    // original dialogue and require every boundary to survive before accepting it.
+    if (units.some(unit => /\[\[|\]\]/.test(unit.text))) return null;
+    const input = units.map((unit, i) => '[[' + (i + 1) + ']] ' + unit.text).join('\n');
+    try {
+      const raw = await translator.translate(input, {signal});
+      signal.throwIfAborted();
+      const marked = [...raw.matchAll(/\[\[(\d+)\]\]/g)];
+      if (marked.length !== units.length || raw.slice(0, marked[0].index).trim()) return null;
+      const output = [];
+      for (const [i, mark] of marked.entries()) {
+        if (Number(mark[1]) !== i + 1) return null;
+        const text = cleanText(raw.slice(mark.index + mark[0].length, marked[i + 1]?.index));
+        // Numbers provide an independent cue identity. A number moved to another
+        // record, or a damaged bracket token, makes the group unsafe to assign.
+        if (/\[\[|\]\]/.test(text) || (text.match(/\p{Nd}+/gu) || []).join(',') !==
+            (units[i].text.match(/\p{Nd}+/gu) || []).join(',')) return null;
+        output.push(text);
+      }
+      if (output.every((text, i) => text === units[i].text)) return null;
+      return output;
+    } catch (error) {
+      signal.throwIfAborted();
+      return null; // Retry these original records individually.
+    }
+  }
+
+  const russianObjectPronouns = new Map([
+    ['Меня', /\bme\b/], ['Мне', /\bme\b/], ['Нас', /\bus\b/], ['Нам', /\bus\b/],
+    ['Тебя', /\byou\b/], ['Тебе', /\byou\b/],
+  ]);
+  function russianDialogue(source, translation, wholeLine) {
+    const sourceBody = source.slice(0, ending.exec(source).index);
+    // Russian object pronouns in the middle of ordinary dialogue use lowercase.
+    // Preserve source emphasis, sentence openings, formal Вы, and proper names.
+    translation = translation.replace(/(\p{Script=Cyrillic}\s+)(Меня|Мне|Нас|Нам|Тебя|Тебе)(?!\p{L})/gu,
+      (match, prefix, pronoun) => russianObjectPronouns.get(pronoun).test(source) ? prefix + pronoun.toLowerCase() : match);
+    const hearing = wholeLine && /^can you hear (me|us)$/i.exec(sourceBody);
+    if (hearing && !/\b[A-Z]{2,}\b/.test(sourceBody)) {
+      const object = hearing[1].toLowerCase() === 'me' ? 'меня' : 'нас';
+      const words = translation.toLowerCase().match(/\p{L}+/gu) || [];
+      const rest = words.filter(word => word !== object);
+      // Russian word order permits the object on either side of the verb. Match
+      // positive forms for this one utterance, including formal and plural address.
+      const positiveForms = [
+        /^(?:(?:ты )?слышишь|слышишь(?: ли)?(?: ты)?)$/,
+        /^(?:(?:вы )?слышите|слышите(?: ли)?(?: вы)?)$/,
+        /^(?:(?:(?:тебе|вам) )?слышно(?: ли)?|слышно(?: ли)? (?:тебе|вам))$/,
+        /^(?:(?:ты )?можешь|(?:вы )?можете|можешь ли ты|можете ли вы) (?:у)?слышать$/,
+      ];
+      if (rest.length !== words.length - 1 || !positiveForms.some(form => form.test(rest.join(' ')))) {
+        // An impersonal sound check avoids guessing ты/вы when the model
+        // lost the verb or referent. A valid native rendering retains its address.
+        return (object === 'меня' ? 'Меня' : 'Нас') + ' слышно' + ending.exec(source)[0];
+      }
+    }
+    // A translated title or name may deliberately contain a common noun.
+    // Normalize an ordinary door/window object only in an explicit command.
+    const action = /^(?:please )?(?:close|open|shut|lock|unlock) (?:the |this |that |a )?(door|window)(?:,? please)?[.!?…]*$/i.exec(source);
+    if (action && /\b(?:door|window)\b/.test(source)) {
+      const object = action[1] === 'door' ? 'Дверь' : 'Окно';
+      translation = translation.replace(/^(?:(?:Пожалуйста,?\s+)?(?:[зЗ]акро(?:й|йте)|[оО]ткро(?:й|йте)|[зЗ]апри(?:те)?|[оО]томкни(?:те)?)\s+)(?:эту |это |ту |то )?(Дверь|Окно)(?=$|[\s.,!?…])/u,
+        (match, noun) => noun === object ? match.slice(0, -noun.length) + noun.toLowerCase() : match);
+    }
+    return translation;
   }
 
   function batchEnd(units, start) {

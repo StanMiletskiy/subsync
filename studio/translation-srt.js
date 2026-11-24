@@ -41,11 +41,11 @@
         const marks = [];
         let from = 0;
         for (const token of line.matchAll(controls)) {
-          if (addUnit) addUnit(line.slice(from, token.index), base + from, index + 1);
+          if (addUnit) addUnit(line.slice(from, token.index), base + from, index + 1, base);
           marks.push(token[0]);
           from = token.index + token[0].length;
         }
-        if (addUnit) addUnit(line.slice(from), base + from, index + 1);
+        if (addUnit) addUnit(line.slice(from), base + from, index + 1, base);
         cueLayout.push([row[2], /^\s*/u.exec(line)[0], /\s*$/u.exec(line)[0], marks]);
       }
       layout.push(cueLayout);
@@ -58,11 +58,11 @@
   function prepare(decodedText) {
     const parsed = srt.parse(decodedText);
     const units = [], spans = [];
-    const originalLayout = inspect(parsed, (text, offset, cue) => {
+    const originalLayout = inspect(parsed, (text, offset, cue, line) => {
       const raw = text.trim();
       if (!/\p{L}/u.test(raw)) return;
       const start = offset + text.length - text.trimStart().length;
-      units.push({id:units.length, cue, text:readable(raw)});
+      units.push({id:units.length, cue, line, text:readable(raw)});
       spans.push({start, end:start + raw.length, raw});
     });
     // Sample across the file since a title card or a credit may use a different language.
