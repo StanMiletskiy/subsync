@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { align } = require("../studio/align.js");
+const { align, mapTime } = require("../studio/align.js");
 
 function random(seed) {
   let state = seed;
@@ -93,10 +93,15 @@ test("declines two equally good occurrences of the same passage", () => {
   assert.equal(align(cues, refs).reliable, false);
 });
 
-test("flags a cut in the middle instead of accepting just the matching section", () => {
+test("aligns both sides of a clearly supported 34-second edit", () => {
   const cues = dialogue(300, 58);
   const ref = [...mapped(cues.slice(0, 200), 1, 15000), ...mapped(cues.slice(200), 1, 49000)];
-  assert.equal(align(cues, ref).reliable, false);
+  const result = align(cues, ref);
+  assert.equal(result.reliable, true, JSON.stringify(result));
+  for (const [i, cue] of cues.entries()) {
+    assert.ok(Math.abs(mapTime(result, cue.start) - ref[i].start) <= 2);
+    assert.ok(Math.abs(mapTime(result, cue.end) - ref[i].end) <= 2);
+  }
 });
 
 test("short excerpts require a much stronger match than film-length subtitles", () => {

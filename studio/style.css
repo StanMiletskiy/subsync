@@ -111,3 +111,11 @@ footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid 
 #player{display:block;max-height:300px;width:100%;background:#171c19}
 #player-line{white-space:pre-line;text-align:center;line-height:1.35;font-size:1rem;min-height:1.9em;padding:4px 10px}
 .play-cue{margin-right:6px;border:1px solid var(--line);border-radius:4px;color:#28583d;background:#edf5e7;font-size:.73rem;padding:3px 5px;vertical-align:middle}
+.timing-sections{margin:0 0 12px;padding:10px 12px;background:#f2f6ed;border-radius:6px}
+.timing-sections h4{margin:0;font-size:.87rem;color:#354d40}
+.timing-sections ul{list-style:none;margin:5px 0 0;padding:0}
+.timing-sections li{display:flex;align-items:baseline;gap:5px 10px;flex-wrap:wrap;margin-top:6px;font-size:.86rem;color:var(--muted)}
+.section-jump{padding:4px 7px;border-radius:4px;border:1px solid #a8b9a8;background:var(--white);color:#28583d;font-size:.85rem}
+.flagged .section-jump{border-color:#b17949;color:#793c17}
+.section-jump[aria-pressed=true]{outline:2px solid currentColor;outline-offset:0}
+.section-cue{background:#edf4e5}

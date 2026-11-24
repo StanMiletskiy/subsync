@@ -2,47 +2,26 @@
 (() => {
   'use strict';
 
-  async function estimate(job, onProgress, signal) {
-    const options = {onProgress, signal};
-    let reference;
-    switch (job.kind) {
-      case 'wav':
-        reference = await SyncAudio.readWavActivity(job.file, options);
-        break;
-      case 'mkv':
-      case 'mp4': {
-        const demuxer = job.kind === 'mkv' ? SyncMkv : SyncMp4;
-        reference = job.track.kind === 'audio'
-          ? await SyncMovieAudio.readMovieActivity(job.file, job.track, demuxer, options)
-          : await demuxer.readCues(job.file, job.track.id, options);
-        break;
-      }
-      default:
-        reference = job.reference;
-    }
-    if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError');
-    onProgress(1);
-    return SyncAlign.align(job.cues, reference);
-  }
-
   function workerStart(calculate) {
     self.onmessage = async ({data}) => {
       self.postMessage({type:'ready'});
       try {
         const value = await calculate(data, fraction => self.postMessage({type:'progress',fraction}));
-        self.postMessage({type:'result',value});
+        const buffer = value.prepared?.activity?.buffer;
+        self.postMessage({type:'result',value}, buffer ? [buffer] : []);
       } catch (error) {
         self.postMessage({type:'failure',message:error.message || String(error)});
       }
     };
   }
   if (typeof document === 'undefined') {
-    workerStart(estimate);
+    workerStart(SyncReference.estimate);
     return;
   }
 
   const byId = id => document.getElementById(id);
-  const engines = ['align-engine', 'audio-engine', 'mkv-engine', 'mp4-engine', 'movie-audio-engine'];
+  const engines = ['align-engine', 'audio-engine', 'mkv-engine', 'mp4-engine', 'movie-audio-engine', 'reference-engine'];
+  const referenceCache = SyncReference.createCache();
   const tracks = {source:null, ref:null};
   const readId = {source:0, ref:0};
   const readAbort = {source:null, ref:null};
@@ -106,14 +85,13 @@
   function invalidate() {
     stop();
     result = null;
+    if (position.startsWith('section-')) position = 'first';
+    showSections();
     controls();
     preview();
   }
   function selectPosition(next) {
     position = next;
-    for (const button of document.querySelectorAll('[data-position]')) {
-      button.setAttribute('aria-pressed', String(button.dataset.position===next));
-    }
     preview();
   }
   function controls() {
@@ -187,6 +165,7 @@
     readAbort[slot] = controller;
     const kind = kindOf(file,slot);
     const record = {file,kind,name:file.name};
+    if (slot==='ref') referenceCache.clear();
     tracks[slot] = record;
     if (slot==='source') selectPosition('first');
     invalidate();
@@ -228,6 +207,7 @@
     }
   }
   function resetFiles() {
+    referenceCache.clear();
     demoSession = false;
     setMedia(null);
     focusedPair = null;
@@ -292,7 +272,7 @@
   }
 
   function runWorker(job, onProgress, signal) {
-    if (typeof Worker!=='function') return estimate(job,onProgress,signal);
+    if (typeof Worker!=='function') return SyncReference.estimate(job,onProgress,signal);
     return new Promise((resolve,reject)=>{
       let worker, blobUrl, started=false;
       const cleanup = () => {
@@ -304,13 +284,13 @@
       const fallback = () => {
         cleanup();
         if (signal.aborted) return reject(new DOMException('Analysis cancelled','AbortError'));
-        estimate(job,onProgress,signal).then(resolve,reject);
+        SyncReference.estimate(job,onProgress,signal).then(resolve,reject);
       };
       try {
         const sources=engines.map(id=>byId(id).textContent);
         if (sources.every(source=>source.trim())) {
           blobUrl=URL.createObjectURL(new Blob([...sources.map(source=>source+'\n;\n'),
-            '('+workerStart.toString()+')('+estimate.toString()+');'],{type:'text/javascript'}));
+            '('+workerStart.toString()+')(SyncReference.estimate);'],{type:'text/javascript'}));
         }
         worker=new Worker(blobUrl || 'worker.js');
         worker.onerror=event=>{
@@ -344,7 +324,7 @@
     controls();
     const parsed=tracks.source.parsed;
     try {
-      let map, title, detail, exportable=true;
+      let map, title, detail, exportable=true, sections=[];
       if (mode==='manual') {
         const pairs=Array.from(byId('anchor-rows').children,(row,index)=>{
           const times=Array.from(row.querySelectorAll('input'),input=>input.value.trim());
@@ -360,25 +340,32 @@
         if (ref.parsed) job.reference=timingOnly(ref.parsed.cues);
         else {job.file=ref.file; job.track=ref.selected;}
         message(ref.parsed?'Comparing timing patterns…':'Reading the selected track…');
-        const answer=await runWorker(job, fraction=>{
+        const answer=await referenceCache.run(job, fraction=>{
           if (running!==controller) return;
           const progress=Math.round(100*Number(fraction));
           if (Number.isFinite(progress)) message(progress>=100?'Comparing timing patterns…':'Reading reference · '+progress+'%');
-        },controller.signal);
+        },controller.signal,runWorker);
         if (running!==controller) return;
         if (!Number.isFinite(answer.scale) || answer.scale<=0 || !Number.isFinite(answer.offsetMs)) throw Error(answer.reason || 'No timing estimate. Use manual anchors or choose another reference.');
-        map=time=>time*answer.scale+answer.offsetMs;
-        exportable=!!answer.reliable;
+        map=time=>SyncAlign.mapTime(answer,time);
+        const edits=answer.edits || [], review=answer.reviewRanges || [];
+        exportable=!!answer.reliable && !review.length;
+        sections=timingSections(parsed.cues,edits,review);
         const drift=((answer.scale-1)*100);
         const sign=drift>=0?'+':'−';
-        title='Offset '+signedSeconds(answer.offsetMs);
+        title=(edits.length?'Starting offset ':'Offset ')+signedSeconds(answer.offsetMs);
         detail='Rate '+sign+Math.abs(drift).toFixed(3)+'% · match score '+Math.round(answer.score*100)+'%';
-        if (!exportable) message((answer.reason || 'Weak timing match.')+' Try manual anchors or a different reference.','error');
+        if (!exportable) message(review.length
+          ? 'Timing needs review. Choose a flagged section in the preview.'
+          : answer.reason || 'Weak timing match. Try manual anchors or another reference.','error');
       }
       let text;
       if (exportable) text=SyncSrt.render(parsed,map);
-      result={map,title,detail,exportable,text};
-      if (exportable) message('Timing ready. Check the start, middle, and end before exporting.','ok');
+      result={map,title,detail,exportable,text,sections};
+      showSections();
+      if (exportable) message(sections.length
+        ? 'Timing adjusted for this cut. Check the timing changes in the preview.'
+        : 'Timing ready. Check the start, middle, and end before exporting.','ok');
     } catch (error) {
       if (running!==controller) return;
       message(error.message || String(error),'error');
@@ -411,12 +398,62 @@
     const label=SyncSrt.formatTime(Math.abs(Math.round(ms)));
     return (ms<0?'−':'')+(short?label.split(/[,.]/)[0]:label);
   }
+  function timingSections(cues, edits, ranges) {
+    const sections = [
+      ...edits.map(edit => ({
+        at: edit.sourceMs,
+        note: 'Subsequent cues move '+(Math.abs(edit.deltaMs)/1000).toFixed(3)+' s '+
+          (edit.deltaMs>0?'later.':'earlier.'),
+      })),
+      ...ranges.map(range => ({at:range.startMs, end:range.endMs, note:range.reason, flagged:true})),
+    ].sort((a,b)=>a.at-b.at);
+    for (const [index, section] of sections.entries()) {
+      // Jump to the first affected cue even when the cut falls inside a long pause.
+      let next=-1, last=0;
+      for (const [i,cue] of cues.entries()) {
+        if (cue.start>cues[last].start) last=i;
+        if (section.flagged && cue.start<=section.at && cue.end>section.at) {next=i; break;}
+        if (cue.start>=section.at && (next<0 || cue.start<cues[next].start)) next=i;
+      }
+      section.index=next<0?last:next;
+      section.position='section-'+index;
+    }
+    return sections;
+  }
+  function showSections() {
+    const sections=result?.sections || [];
+    const box=byId('timing-sections'), list=byId('section-list');
+    box.hidden=!sections.length;
+    list.replaceChildren();
+    if (!sections.length) return;
+    const needsReview=sections.some(section=>section.flagged);
+    byId('sections-heading').textContent=needsReview?'Sections to check · original subtitle time':'Timing changes · original subtitle time';
+    for (const section of sections) {
+      const row=document.createElement('li'), button=document.createElement('button'), note=document.createElement('span');
+      row.className=section.flagged?'flagged':'corrected';
+      button.type='button'; button.className='section-jump'; button.dataset.position=section.position;
+      let label=prettyTime(section.at,true);
+      if (section.flagged && prettyTime(section.end,true)!==label) label+='–'+prettyTime(section.end,true);
+      button.textContent=(section.flagged?'Review ':'Check ')+label;
+      button.addEventListener('click',()=>{
+        selectPosition(section.position);
+        if (mediaReady) playCue(result.map(tracks.source.parsed.cues[section.index].start));
+      });
+      note.textContent=section.note;
+      row.append(button,note); list.append(row);
+    }
+  }
   function preview() {
     const sample=!tracks.source?.parsed;
     const cues=sample?example.source.cues:tracks.source.parsed.cues;
     const map=sample?(time=>time+2400):result?.map;
     byId('preview-type').textContent=sample?'Example':demoSession?'Demo files':!result?'Original':result.exportable?'Adjusted':'Low confidence';
-    const offset=position==='last'?Math.max(0,cues.length-3):position==='middle'?Math.max(0,Math.floor((cues.length-3)/2)):0;
+    for (const button of document.querySelectorAll('[data-position]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.position===position));
+    }
+    const section=result?.sections.find(item=>item.position===position);
+    const offset=section?Math.max(0,Math.min(cues.length-3,section.index-1)):
+      position==='last'?Math.max(0,cues.length-3):position==='middle'?Math.max(0,Math.floor((cues.length-3)/2)):0;
     const selected=cues.slice(offset,offset+3);
     const start=selected[0]?.start ?? 0;
     const end=selected[selected.length-1]?.end ?? start+30000;
@@ -429,6 +466,7 @@
     const body=byId('cue-list'); body.replaceChildren();
     for (const cue of selected) {
       const row=document.createElement('tr');
+      if (section && cue===cues[section.index]) row.className='section-cue';
       const line=document.createElement('td'), isolated=document.createElement('bdi');
       isolated.dir='auto'; isolated.textContent=cue.text;
       if (mediaReady && !sample) {
@@ -531,6 +569,7 @@
   byId('movie-track').addEventListener('change',event=>{
     const ref=tracks.ref;
     if (!ref?.tracks) return;
+    referenceCache.clear();
     ref.selected=ref.tracks.find(track=>String(track.id)===event.target.value) || null;
     invalidate(); guide();
   });

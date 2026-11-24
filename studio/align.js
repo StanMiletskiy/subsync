@@ -5,7 +5,7 @@
 
   const commonRates = [1, 24 / 25, 25 / 24, 24000 / 25025, 25025 / 24000, 1000 / 1001, 1001 / 1000];
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-  const failure = reason => ({ offsetMs: 0, scale: 1, score: 0, reliable: false, reason });
+  const failure = reason => ({ offsetMs: 0, scale: 1, score: 0, reliable: false, edits: [], reviewRanges: [], reason });
 
   function ordered(cues) {
     return cues.filter(c => c && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end > c.start)
@@ -212,11 +212,18 @@
     const base = (c.scale * (source.origin + step / 2) + c.offset - ref.origin) / step - 0.5;
     const scores = [];
     let observations = 0, total = 0, weakest = 1;
+    let editIndex = 0, editBins = 0;
     for (let g = 0; g < segments; g++) {
       let sx = 0, sy = 0, xx = 0, yy = 0, xy = 0, n = 0;
       const lo = Math.floor(x.length * g / segments), hi = Math.floor(x.length * (g + 1) / segments);
       for (let i = lo; i < hi; i += stride) {
-        const u = i * c.scale + base, j = Math.floor(u);
+        if (c.edits) {
+          const time = source.origin + (i + 0.5) * step;
+          while (editIndex < c.edits.length && c.edits[editIndex].sourceMs <= time) {
+            editBins += c.edits[editIndex++].deltaMs / step;
+          }
+        }
+        const u = i * c.scale + base + editBins, j = Math.floor(u);
         if (j < 0 || j >= y.length - 1) continue;
         const a = x[i], b = y[j] + (y[j + 1] - y[j]) * (u - j);
         sx += a; sy += b; xx += a * a; yy += b * b; xy += a * b; n++;
@@ -251,12 +258,17 @@
     return current;
   }
 
-  function nearest(sorted, t) {
+  function lowerBound(sorted, t) {
     let lo = 0, hi = sorted.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
       if (sorted[mid] < t) lo = mid + 1; else hi = mid;
     }
+    return lo;
+  }
+
+  function nearest(sorted, t) {
+    const lo = lowerBound(sorted, t);
     const a = sorted[Math.max(0, lo - 1)], b = sorted[Math.min(lo, sorted.length - 1)];
     return Math.abs(t - a) < Math.abs(t - b) ? a : b;
   }
@@ -285,6 +297,290 @@
       candidate = { scale, offset: my - scale * mx };
     }
     return candidate;
+  }
+
+  function mapTime(fit, ms) {
+    let time = ms * fit.scale + fit.offsetMs;
+    for (const edit of fit.edits || []) {
+      if (ms < edit.sourceMs) break;
+      time += edit.deltaMs;
+    }
+    return time;
+  }
+
+  function median(values) {
+    values.sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+  }
+
+  function matchesCue(cue, starts, ends, scale, offset, tolerance) {
+    const start = cue.start * scale + offset, end = cue.end * scale + offset;
+    return Math.abs(nearest(starts, start) - start) < tolerance &&
+      Math.abs(nearest(ends, end) - end) < tolerance;
+  }
+
+  // A landmark must agree with several surrounding cues. A shared duration or
+  // one similar line on its own is much too common to identify a cut.
+  function textLandmarks(cues, reference, starts, ends, fit) {
+    const landmarks = [];
+    for (let i = 0; i < cues.length; i++) {
+      const cue = cues[i], expected = cue.start * fit.scale + fit.offsetMs;
+      const duration = (cue.end - cue.start) * fit.scale;
+      let best = null, runnerUp = -Infinity;
+      const lo = lowerBound(starts, expected - 120000), hi = lowerBound(starts, expected + 120000);
+      // Very dense tracks can contain thousands of simultaneous overlays.
+      if (hi - lo > 450) continue;
+      for (let j = lo; j < hi; j++) {
+        const match = reference[j];
+        if (Math.abs((match.end - match.start) - duration) > 400) continue;
+        const offset = match.start - cue.start * fit.scale;
+        let score = 0, hits = 0;
+        for (let k = Math.max(0, i - 5); k < Math.min(cues.length, i + 6); k++) {
+          if (i === k) continue;
+          const t = cues[k].start * fit.scale + offset, e = cues[k].end * fit.scale + offset;
+          const error = Math.max(Math.abs(nearest(starts, t) - t), Math.abs(nearest(ends, e) - e));
+          if (error < 420) { score += 1 - error / 560; hits++; }
+        }
+        if (hits < 4 || score < 3.3) continue;
+        if (!best || score > best.score) {
+          if (best) runnerUp = Math.max(runnerUp, best.score);
+          best = { i, x: cue.start, y: match.start, score };
+        } else runnerUp = Math.max(runnerUp, score);
+      }
+      if (best && best.score - runnerUp > 1.15) landmarks.push(best);
+    }
+    return landmarks;
+  }
+
+  function plateaus(points) {
+    // A median of local slopes largely ignores pairs that straddle an edit.
+    const slopes = [];
+    for (let i = 4; i < points.length; i++) {
+      const a = points[Math.max(0, i - 12)], b = points[i];
+      const elapsed = b.x - a.x;
+      if (elapsed >= 12000 && elapsed < 240000) slopes.push((b.y - a.y) / elapsed);
+    }
+    if (!slopes.length) return [];
+    const rate = median(slopes);
+    if (rate < 0.94 || rate > 1.06) return [];
+    const runs = [];
+    for (const p of points) {
+      const offset = p.y - rate * p.x;
+      const last = runs.at(-1);
+      if (last && Math.abs(offset - last.meanOffset) < 800) {
+        last.points.push(p);
+        last.meanOffset += (offset - last.meanOffset) / last.points.length;
+      } else runs.push({ points: [p], meanOffset: offset });
+    }
+    // Isolated landmarks cannot establish a section. Rejoin stable runs
+    // separated by a stray landmark, then refit the shared frame-rate slope.
+    const stable = [];
+    for (const run of runs) {
+      if (run.points.length < 4 || run.points.at(-1).x - run.points[0].x < 5000) continue;
+      const last = stable.at(-1);
+      if (last && Math.abs(last.meanOffset - run.meanOffset) < 800) {
+        for (const point of run.points) last.points.push(point);
+      } else stable.push(run);
+    }
+    return stable;
+  }
+
+  function sharedRate(runs) {
+    let xx = 0, xy = 0;
+    for (const {points} of runs) {
+      let mx = 0, my = 0;
+      for (const p of points) { mx += p.x / points.length; my += p.y / points.length; }
+      for (const p of points) { xx += (p.x - mx) ** 2; xy += (p.x - mx) * (p.y - my); }
+    }
+    return xy / xx;
+  }
+
+  function review(startMs, endMs, reason) {
+    return { startMs, endMs: Math.max(startMs + 1, endMs), reason };
+  }
+
+  // Two or three cues at an edge can have precise evidence for a different
+  // offset while still being too short for an automatic correction.
+  function shortEdgeReview(cues, starts, ends, fit) {
+    if (!fit.reliable || fit.score < 0.7) return null;
+    const ranges = [];
+    for (const direction of [1, -1]) {
+      const run = [];
+      let i = direction > 0 ? 0 : cues.length - 1;
+      while (run.length <= 6 && i >= 0 && i < cues.length) {
+        const cue = cues[i], offset = mapTime(fit, cue.start) - cue.start * fit.scale;
+        if (matchesCue(cue, starts, ends, fit.scale, offset, 450)) break;
+        run.push(cue);
+        i += direction;
+      }
+      if (run.length < 2 || run.length > 6) continue;
+      const seed = run[0], expected = mapTime(fit, seed.start);
+      const lo = lowerBound(starts, expected - 120000), hi = lowerBound(starts, expected + 120000);
+      if (hi - lo > 450) continue;
+      for (let j = lo; j < hi; j++) {
+        const offset = starts[j] - seed.start * fit.scale;
+        if (Math.abs(starts[j] - expected) < 1000) continue;
+        if (run.every(cue => matchesCue(cue, starts, ends, fit.scale, offset, 90))) {
+          const first = direction > 0 ? seed : run.at(-1), last = direction > 0 ? run.at(-1) : seed;
+          ranges.push(review(first.start, last.end, "These edge cues match a different offset. Check their timing."));
+          break;
+        }
+      }
+    }
+    return ranges.length ? { ...fit, reliable: false, reviewRanges: ranges,
+      reason: "Check the short marked section before exporting." } : null;
+  }
+
+  function transition(cues, left, right, rate, starts, ends) {
+    let lo = left.points.at(-1).i, hi = right.points[0].i;
+    // Narrow the transition only when the available edges support one side
+    // exclusively. A line removed from this release has no safe target time.
+    while (lo + 1 < hi && matchesCue(cues[lo + 1], starts, ends, rate, left.offset, 430) &&
+        !matchesCue(cues[lo + 1], starts, ends, rate, right.offset, 430)) lo++;
+    while (hi - 1 > lo && matchesCue(cues[hi - 1], starts, ends, rate, right.offset, 430) &&
+        !matchesCue(cues[hi - 1], starts, ends, rate, left.offset, 430)) hi--;
+    let lastEnd = cues[lo].end;
+    // Earlier overlapping cues may extend across this boundary too.
+    for (let i = 0; i < lo; i++) lastEnd = Math.max(lastEnd, cues[i].end);
+    const delta = right.offset - left.offset;
+    const sourceGap = cues[hi].start - lastEnd;
+    if (lo + 1 !== hi || sourceGap <= 0 || sourceGap * rate + delta < 0) {
+      return { range: review(cues[lo].start, cues[hi].end,
+        "Some lines at this edit overlap or have no clear counterpart in the reference.") };
+    }
+    return { edit: { sourceMs: cues[hi].start, deltaMs: delta } };
+  }
+
+  function textEdits(cues, reference, fit, competingFit) {
+    const starts = reference.map(c => c.start), ends = reference.map(c => c.end).sort((a, b) => a - b);
+    let unmatched = 0, longest = 0;
+    for (const cue of cues) {
+      unmatched = matchesCue(cue, starts, ends, fit.scale, fit.offsetMs, 450) ? 0 : unmatched + 1;
+      longest = Math.max(longest, unmatched);
+    }
+    if (fit.reliable && longest < 3) return longest === 2 ? shortEdgeReview(cues, starts, ends, fit) || fit : fit;
+    const points = textLandmarks(cues, reference, starts, ends, fit);
+    if (points.length < 12 || points.length < cues.length * 0.3) return null;
+    const groups = plateaus(points);
+    if (groups.length < 2) return shortEdgeReview(cues, starts, ends, fit);
+    if (groups.length > 20 || competingFit) return null;
+    const rate = sharedRate(groups);
+    if (!(rate >= 0.94 && rate <= 1.06)) return null;
+    for (const group of groups) {
+      group.offset = median(group.points.map(p => p.y - rate * p.x));
+    }
+    const edits = [], ranges = [];
+    for (let i = 1; i < groups.length; i++) {
+      const left = groups[i - 1], right = groups[i];
+      if (Math.abs(right.offset - left.offset) < 850) return null;
+      const {edit, range} = transition(cues, left, right, rate, starts, ends);
+      if (range) ranges.push(range);
+      else edits.push(edit);
+    }
+    if (ranges.length) return { ...fit, reliable: false, reviewRanges: ranges,
+      reason: "Check the cues near the marked edit before exporting." };
+    // Require good coverage on every section, including the first and last.
+    // This also prevents accidental matches to sparse excerpts in unrelated tracks.
+    const proposed = { ...fit, scale: rate, offsetMs: groups[0].offset, edits };
+    let misses = 0, startMiss = 0;
+    function finishRun(last) {
+      if (misses >= 6) ranges.push(review(cues[startMiss].start, cues[last].end,
+        "These cues do not have clear matching times in the reference."));
+      misses = 0;
+    }
+    for (let group = 0; group < groups.length; group++) {
+      const from = group ? groups[group].points[0].i : 0;
+      const to = group + 1 === groups.length ? cues.length : groups[group + 1].points[0].i;
+      let hits = 0;
+      for (let i = from; i < to; i++) {
+        const c = cues[i], offset = mapTime(proposed, c.start) - rate * c.start;
+        if (matchesCue(c, starts, ends, rate, offset, 450)) {
+          hits++;
+          finishRun(i - 1);
+        } else {
+          if (!misses) startMiss = i;
+          misses++;
+        }
+      }
+      if (hits < (to - from) * 0.55) return null;
+    }
+    finishRun(cues.length - 1);
+    if (ranges.length) return { ...proposed, reliable: false, reviewRanges: ranges,
+      reason: "Check the timing near the marked section before exporting." };
+    return { ...proposed, reliable: true,
+      reason: "Timing changes are supported by matching cue boundaries on each side." };
+  }
+
+  function localPattern(source, ref, step, fit, start, end) {
+    const x = source.values, y = ref.values;
+    const lo = clamp(Math.floor((start - source.origin) / step), 0, x.length - 1);
+    const hi = clamp(Math.ceil((end - source.origin) / step), lo + 1, x.length);
+    const stride = Math.max(1, Math.ceil((hi - lo) / 320));
+    const indexes = [], values = [];
+    for (let i = lo; i < hi; i += stride) {
+      indexes.push(Math.round((mapTime(fit, source.origin + (i + 0.5) * step) - ref.origin) / step - 0.5));
+      values.push(x[i]);
+    }
+    return shift => {
+      let n = 0, sx = 0, sy = 0, xx = 0, yy = 0, xy = 0;
+      for (let i = 0; i < values.length; i++) {
+        const j = indexes[i] + shift;
+        if (j < 0 || j >= y.length) continue;
+        const a = values[i], b = y[j];
+        n++; sx += a; sy += b; xx += a * a; yy += b * b; xy += a * b;
+      }
+      if (n < values.length * 0.75) return -1;
+      const variance = (xx - sx * sx / n) * (yy - sy * sy / n);
+      return variance > 1e-6 ? (xy - sx * sy / n) / Math.sqrt(variance) : 0;
+    };
+  }
+
+  // Acoustic activity (and differently segmented text) can locate a mismatch
+  // without identifying which exact cue belongs to each side. Keep that case
+  // inspectable, rather than declaring an audio-derived jump exportable.
+  function checkLocalActivity(cues, source, ref, step, fit, audio) {
+    if (fit.score < 0.32) return fit;
+    const windows = [];
+    const width = Math.min(cues.length, Math.max(16, Math.ceil(cues.length / 180)));
+    for (let from = 0; ; from = Math.min(from + Math.ceil(width / 2), cues.length - width)) {
+      const to = Math.min(from + width, cues.length);
+      const start = cues[from].start, end = cues[to - 1].end;
+      const corr = localPattern(source, ref, step, fit, start, end);
+      const base = corr(0);
+      const win = {start, end, base, suspicious: false};
+      windows.push(win);
+      if (base < Math.min(0.55, fit.score - 0.13)) {
+        let best = base, runnerUp = -1, bestShift = 0;
+        const separation = Math.ceil(1800 / step), hop = Math.max(1, Math.round(350 / step));
+        const limit = Math.round(120000 / step), scores = [];
+        for (let shift = -limit; shift <= limit; shift += hop) {
+          const r = corr(shift);
+          scores.push(r);
+          if (r > best) {best = r; bestShift = shift;}
+        }
+        for (let i = 0; i < scores.length; i++) {
+          if (Math.abs(i * hop - limit - bestShift) > separation) runnerUp = Math.max(runnerUp, scores[i]);
+        }
+        win.suspicious = Math.abs(bestShift * step) >= 1000 && best - base > 0.22 &&
+          best > (audio ? 0.48 : 0.6) && best - runnerUp > 0.075;
+      }
+      if (to === cues.length) break;
+    }
+    if (!windows.some(w => w.base >= (audio ? 0.48 : 0.6))) return fit;
+    const ranges = [];
+    for (const w of windows) {
+      // A whole run of cues without the expected pattern can also be missing
+      // dialogue. Require strong evidence elsewhere before reporting this.
+      const weak = w.base < 0.10 && fit.score >= (audio ? 0.70 : 0.75);
+      if (!w.suspicious && !weak) continue;
+      const last = ranges.at(-1);
+      if (last && w.start <= last.endMs + 5000) last.endMs = Math.max(last.endMs, w.end);
+      else ranges.push(review(w.start, w.end, "The local timing differs from the rest of this release."));
+    }
+    if (!ranges.length) return fit;
+    return { ...fit, reliable: false, reviewRanges: ranges,
+      reason: "Check the marked section against the film. A single timing correction does not fit it consistently." };
   }
 
   function align(input, reference, options = {}) {
@@ -330,10 +626,28 @@
       reason = rival ? "Several timings fit this pattern. Check the proposed timing or set manual anchors."
         : "The tracks do not show a consistent dialogue match. Try another reference or set manual anchors.";
     }
-    return { offsetMs: Math.round(best.offset), scale: best.scale, score, reliable, reason };
+    const fit = { offsetMs: Math.round(best.offset), scale: best.scale, score, reliable, reason, edits: [], reviewRanges: [] };
+    if (cues.length < 16 || span < 45000) return fit;
+    if (refCues) {
+      const local = textEdits(cues, refCues, fit, !!rival && score > 0.75);
+      if (local) {
+        if (local.reliable && local.edits.length) {
+          const corrected = evaluate(source, ref, step, { scale: local.scale, offset: local.offsetMs, edits: local.edits }, stride, segments);
+          local.score = clamp(corrected.r, 0, 1);
+          if (local.score < minimumScore || corrected.coverage < 0.76 || corrected.weakest < 0.25) {
+            return checkLocalActivity(cues, source, ref, step, { ...fit, reliable: false,
+              reason: "The proposed cut does not fit the full timeline consistently." }, false);
+          }
+          const starts = refCues.map(c => c.start), ends = refCues.map(c => c.end).sort((a, b) => a - b);
+          return shortEdgeReview(cues, starts, ends, local) || local;
+        }
+        return local;
+      }
+    }
+    return checkLocalActivity(cues, source, ref, step, fit, audio);
   }
 
-  const api = { align };
+  const api = { align, mapTime };
   root.SyncAlign = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(globalThis);

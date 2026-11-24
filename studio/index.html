@@ -76,6 +76,10 @@
         <div class="review-head"><h3>Review cues</h3><div class="positions" role="group" aria-label="Preview position">
           <button type="button" data-position="first" aria-pressed="true">Start</button><button type="button" data-position="middle" aria-pressed="false">Middle</button><button type="button" data-position="last" aria-pressed="false">End</button>
         </div></div>
+        <section class="timing-sections" id="timing-sections" aria-labelledby="sections-heading" hidden>
+          <h4 id="sections-heading">Timing changes</h4>
+          <ul id="section-list"></ul>
+        </section>
         <div class="table-wrap">
           <table><thead><tr><th scope="col">Subtitle text</th><th scope="col">Original start</th><th scope="col">Adjusted start</th></tr></thead><tbody id="cue-list"></tbody></table>
         </div>
@@ -85,7 +89,7 @@
     <details class="help"><summary>Working with a movie or a different cut?</summary>
       <p>Choose a timed SRT, an embedded text track in an MKV or MP4 movie, or a soundtrack your browser can decode. For other audio formats, extract the dialogue track as a mono WAV. With FFmpeg installed, this command selects the first audio track. Choose the audio track that matches your film.</p>
       <pre><code>ffmpeg -i "movie.mkv" -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le "reference.wav"</code></pre>
-      <p>Automatic alignment compares timing patterns. Music, sparse dialogue, or an inserted scene can make the estimate uncertain. Compare cues near the start, middle, and end. For a different cut, add timing pairs around the edit and check the lines in between. Lines absent from your release require editing separately.</p>
+      <p>Automatic alignment compares dialogue timing across the film. When the timing changes partway through, the preview shows where a correction was applied or where the match needs review. Choose a section to inspect the surrounding cues. For an uncertain cut between cues, use four manual pairs. Pick one early in the film, one just before the cut, one just after it, and one near the end. Lines missing from the release need editing separately.</p>
     </details>
     <footer><span>Cueframe</span><span>Subtitle and audio files stay on this device.</span></footer>
   </main>
@@ -95,6 +99,7 @@
   <script id="mkv-engine" src="mkv.js"></script>
   <script id="mp4-engine" src="mp4.js"></script>
   <script id="movie-audio-engine" src="movie-audio.js"></script>
+  <script id="reference-engine" src="reference-cache.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
