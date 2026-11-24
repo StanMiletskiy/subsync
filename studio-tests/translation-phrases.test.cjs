@@ -134,3 +134,34 @@ test('uniform tags can span a whole phrase; emphasis, speaker, positions and sty
     assert.ok(scoped(body).every(g=>g.units.length===1),body);
   }
 });
+
+test('unique Latin/Cyrillic transliterations retain both names at their original cue time without rewriting',()=>{
+  const source = pair('Both of our visitors\r\nPetra and Viktor','are back in town.');
+  const phrase = plan(source.units,'en-US')[0];
+  const target = 'Наши гости Петра и Виктор уже вернулись в город.';
+  const out = redistribute(phrase,target,'ru-RU');
+  assert.equal(out.length,3);
+  assert.match(out.slice(0,2).join(' '),/Петра и Виктор/u);
+  assert.doesNotMatch(out[2],/Петра|Виктор/u);
+  assert.equal(out.join(' '),target);
+  const reverse = plan(pair('Наши гости\r\nПетра и Виктор','уже вернулись в город.').units,'ru-RU')[0];
+  const english = 'Our two guests Petra and Viktor are already back in the city.';
+  const result = redistribute(reverse,english,'en-GB');
+  assert.match(result.slice(0,2).join(' '),/Petra and Viktor/u);
+  assert.equal(result.join(' '),english);
+});
+
+test('source-initial names recognized mid-sentence reject an impossible order in either direction',()=>{
+  const en = plan(pair('Helena waited,','and Viktor drove.').units,'en')[0];
+  assert.equal(redistribute(en,'За рулём уже был Виктор, а на крыльце ждала Хелена.','ru'),null);
+  const ru = plan(pair('Хелена ждала,','а Виктор ехал.').units,'ru')[0];
+  assert.equal(redistribute(ru,'At the wheel was Viktor, and on the porch stood Helena.','en'),null);
+});
+
+test('ambiguous transliterations defer without assigning a name by a fuzzy edit or guessed position',()=>{
+  const p = plan(pair('We called Klara,','and sent a message.').units,'en')[0];
+  assert.equal(redistribute(p,'Мы звали Клара, потом Клара получила сообщение.','ru'),null);
+  // Both Latin spellings yield one transliteration signature; no unique assignment.
+  const collided = plan(pair('We saw Kiril and Kiríl,','and went home.').units,'en')[0];
+  assert.equal(redistribute(collided,'Там был Кирил, и мы пошли домой.','ru'),null);
+});

@@ -57,7 +57,7 @@
         prev.text = joinText(prev.text, unit.text, sourceLanguage);
         prev.units.push(unit);
       } else {
-        phrases.push({id:unit.id, cue:unit.cue, text:unit.text, units:[unit]});
+        phrases.push({id:unit.id, cue:unit.cue, text:unit.text, sourceLanguage, units:[unit]});
       }
     }
     return phrases;
@@ -97,7 +97,41 @@
   // A word may move freely across visual lines displayed at the same instant.
   // Across different cue times, preserve each cue's numbers and distinctive
   // names that appear in both languages. Refuse an impossible assignment.
-  function timedCuts(units, text, cuts) {
+  const cyrillic = {
+    а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'yo',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',
+    о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ъ:'',ы:'y',
+    ь:'',э:'e',ю:'yu',я:'ya',
+  };
+
+  function nameScript(language) {
+    if (!language) return '';
+    try {
+      const locale = new Intl.Locale(language).maximize();
+      // Russian is the Cyrillic locale with a supported transliteration table.
+      return locale.script === 'Cyrl' && locale.language !== 'ru' ? '' : locale.script;
+    } catch { return ''; }
+  }
+
+  function nameKey(word, script) {
+    if (!script) return '';
+    let key = word.normalize('NFC').toLowerCase().replace(/[’'-]/gu, '');
+    if (script === 'Cyrl') {
+      if (!/^\p{Script=Cyrillic}+$/u.test(key)) return '';
+      const letters = Array.from(key, char => cyrillic[char]);
+      if (letters.some(part => part === undefined)) return '';
+      key = letters.join('');
+    } else {
+      if (!/^\p{Script=Latin}+$/u.test(key)) return '';
+      key = key.replace(/š/gu,'sh').replace(/č/gu,'ch').replace(/ž/gu,'zh')
+        .normalize('NFD').replace(/\p{M}/gu,'');
+    }
+    // These are spelling equivalences, not fuzzy edits. Short or low-diversity
+    // strings are insufficient evidence across scripts.
+    key = key.replace(/kh/gu,'h').replace(/([aeiou])[iyj]$/u,'$1y');
+    return /^[a-z]{4,}$/u.test(key) && new Set(key).size >= 3 ? key : '';
+  }
+
+  function timedCuts(units, text, cuts, sourceLanguage, targetLanguage) {
     if (units.every(u => u.cue === units[0].cue)) return [];
     const digits = value => Array.from(value.normalize('NFKC'), ch => {
       const code = ch.codePointAt(0);
@@ -113,19 +147,38 @@
     const keys = values => values.map(n => n.key).sort().join('/');
     if (sourceNumbers.some(list => list.length) && keys(sourceNumbers.flat()) !== keys(target)) return null;
 
-    // Only a uniquely repeated spelling is evidence. Transliterations, names
-    // with changing inflections, and generic sentence-opening capitals are not guessed.
-    const words = value => Array.from(value.matchAll(/[\p{L}\p{M}’'-]+/gu));
+    // Use uniquely shared spelling or a unique transliterated signature across
+    // the active scripts. Inflections, nicknames and sound-alikes are not guessed.
+    const words = value => Array.from(value.matchAll(/[\p{L}\p{M}]+(?:[’'-][\p{L}\p{M}]+)*/gu));
     const spelling = word => word.normalize('NFC').toLowerCase();
+    const sourceScript = nameScript(sourceLanguage), targetScript = nameScript(targetLanguage);
+    const crossScript = sourceScript === 'Latn' && targetScript === 'Cyrl' || sourceScript === 'Cyrl' && targetScript === 'Latn';
     const sourceWords = units.flatMap((unit,slot) => words(unit.text).map(m => ({word:m[0],slot,at:m.index})));
     const targetWords = words(text);
     const names = [];
-    for (const w of sourceWords) {
-      if (!/^\p{Lu}[\p{L}\p{M}’'-]{2,}$/u.test(w.word) || (w.slot === 0 && !w.at)) continue;
-      const key = spelling(w.word), found = targetWords.filter(m => spelling(m[0]) === key);
-      if (found.length === 1 && sourceWords.filter(other => spelling(other.word) === key).length === 1) {
-        names.push({slot:w.slot,at:found[0].index,end:found[0].index+found[0][0].length});
+    const sourceSignatures = crossScript ? sourceWords.map(w => nameKey(w.word,sourceScript)) : [];
+    const targetSignatures = crossScript ? targetWords.map(m => nameKey(m[0],targetScript)) : [];
+    for (const [index,w] of sourceWords.entries()) {
+      if (!/^\p{Lu}[\p{L}\p{M}’'-]{2,}$/u.test(w.word)) continue;
+      const key = spelling(w.word), signature = sourceSignatures[index];
+      const exact = targetWords.filter(m => spelling(m[0]) === key);
+      let found = exact;
+      if (exact.length && sourceWords.filter(other => spelling(other.word) === key).length !== 1) continue;
+      if (signature) {
+        const equivalents = targetWords.filter((m,i) => targetSignatures[i] === signature);
+        if (equivalents.length) {
+          if (sourceSignatures.filter(s => s === signature).length !== 1 || exact.length || equivalents.length !== 1) return null;
+          if (!/^\p{Lu}/u.test(equivalents[0][0])) continue;
+          found = equivalents;
+        }
       }
+      if (found.length !== 1) continue;
+      const token = found[0];
+      // If the source word opens the phrase, its capitalization alone proves
+      // nothing. Require a capitalized match in the middle of a target sentence.
+      if (index === 0 && (!/^\p{Lu}/u.test(token[0]) ||
+          /(?:^|[.!?…])\s*["'«“(]*$/u.test(text.slice(0,token.index)))) continue;
+      names.push({slot:w.slot,at:token.index,end:token.index+token[0].length});
     }
     const rules = [];
     for (let k = 1; k < units.length; k++) {
@@ -164,7 +217,7 @@
     const {cuts, total} = boundaries(text, targetLanguage, gs);
     const slots = phrase.units.length;
     if (total < slots || cuts.length < slots - 1) return null;
-    const timed = timedCuts(phrase.units,text,cuts);
+    const timed = timedCuts(phrase.units,text,cuts,phrase.sourceLanguage,targetLanguage);
     if (!timed) return null;
     const weights = phrase.units.map(u=>Array.from(u.text).length);
     const length = weights.reduce((sum, n)=>sum+n,0);
